@@ -404,15 +404,28 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     return integrations.resource(id, name, new URLSearchParams(req.query as Record<string, string>));
   });
 
-  app.post('/api/v1/integrations/:id/actions/:name', admin, async (req, reply) => {
+  app.post('/api/v1/integrations/:id/actions/:name', { ...admin, bodyLimit: 6 * 1024 * 1024 }, async (req, reply) => {
     const { id, name } = req.params as { id: string; name: string };
-    if (!UUID.test(id) || !/^[a-z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
+    if (!UUID.test(id) || !/^[a-zA-Z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // Nell'audit non finisce il contenuto dei file caricati
+    const auditBody = typeof body.torrentBase64 === 'string' ? { ...body, torrentBase64: `<${Math.round((body.torrentBase64 as string).length * 0.75 / 1024)} KB>` } : body;
+    const target = integrations.get(id);
+    // Protezione: niente eliminazione dei file di torrent che il motore media non ha ancora importato
+    if (target.type === 'qbittorrent' && name === 'delete' && body.deleteFiles === true && body.force !== true && d.media) {
+      const pending = await d.media.pendingFor(Array.isArray(body.hashes) ? (body.hashes as string[]) : []).catch(() => null);
+      if (pending === null) return reply.code(409).send({ error: 'Motore media non raggiungibile: impossibile verificare se i file sono già in libreria', code: 'media_unknown' });
+      if (pending.length) {
+        audit.log(req, 'integration.action.delete', 'denied', target.name, { motivo: 'file non ancora importati', file: pending });
+        return reply.code(409).send({ error: `${pending.length} file non sono ancora nella libreria: eliminandoli andrebbero persi`, code: 'not_imported', files: pending });
+      }
+    }
     try {
-      const r = await integrations.action(id, name, req.body);
-      audit.log(req, `integration.action.${name}`, 'ok', r.integration, req.body);
+      const r = await integrations.action(id, name, body);
+      if (!name.startsWith('search')) audit.log(req, `integration.action.${name}`, 'ok', r.integration, auditBody);
       return r;
     } catch (e) {
-      audit.log(req, `integration.action.${name}`, 'error', id, { body: req.body, err: (e as Error).message });
+      audit.log(req, `integration.action.${name}`, 'error', id, { body: auditBody, err: (e as Error).message });
       throw e;
     }
   });

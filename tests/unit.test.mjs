@@ -135,3 +135,57 @@ test('armony: chiave API Bearer, stato dal vivo, comandi limitati', async () => 
     srv.close();
   }
 });
+
+test('qbittorrent: controllo, limiti, aggiunta e ricerca con validazione', async () => {
+  const http = await import('node:http');
+  const { qbittorrent } = await import('../apps/api/dist/connectors/qbittorrent.js');
+  const calls = [];
+  const srv = http.createServer(async (req, res) => {
+    let b = '';
+    for await (const c of req) b += c;
+    calls.push({ url: req.url, body: b, ct: req.headers['content-type'] ?? '' });
+    if (req.headers.authorization !== 'Bearer qbt_ok') return res.writeHead(403).end();
+    if (req.url === '/api/v2/search/start') return res.end(JSON.stringify({ id: 7 }));
+    if (req.url.startsWith('/api/v2/search/results'))
+      return res.end(JSON.stringify({ status: 'Stopped', total: 3, results: [
+        { fileName: 'Poco seed', fileUrl: 'magnet:?xt=urn:btih:aaa', fileSize: 10, nbSeeders: 1, nbLeechers: 0, siteUrl: 'https://a', descrLink: 'https://a/1' },
+        { fileName: 'Molti seed', fileUrl: 'https://b/x.torrent', fileSize: 20, nbSeeders: 99, nbLeechers: 3, siteUrl: 'https://b', descrLink: 'javascript:alert(1)' },
+        { fileName: 'Link strano', fileUrl: 'file:///etc/passwd', fileSize: 1, nbSeeders: 500, nbLeechers: 0, siteUrl: 'x', descrLink: '' },
+      ] }));
+    res.end('Ok.');
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const bl = buildBlockList(['127.0.0.0/8']);
+  const ctx = { id: 'q', baseUrl: base, auth: 'apikey', secret: { apiKey: 'qbt_ok' }, config: {}, http: (p, i) => safeFetch(bl, base + p, i) };
+  const H = 'a'.repeat(40);
+  try {
+    await qbittorrent.actions.control(ctx, { op: 'stop', hashes: [H] });
+    assert.equal(calls.at(-1).url, '/api/v2/torrents/stop');
+    assert.equal(new URLSearchParams(calls.at(-1).body).get('hashes'), H);
+    await assert.rejects(qbittorrent.actions.control(ctx, { op: 'delete', hashes: [H] }), /non consentita/);
+    await assert.rejects(qbittorrent.actions.control(ctx, { op: 'stop', hashes: ['../x'] }), /non valido/);
+    await qbittorrent.actions.shareLimits(ctx, { hashes: [H], ratio: 2, minutes: -1 });
+    const sl = new URLSearchParams(calls.at(-1).body);
+    assert.deepEqual([sl.get('ratioLimit'), sl.get('seedingTimeLimit')], ['2', '-1']);
+    await assert.rejects(qbittorrent.actions.shareLimits(ctx, { hashes: [H], ratio: -5, minutes: 0 }), /non valido/);
+    await qbittorrent.actions.seedingPrefs(ctx, { ratioEnabled: true, ratio: 1.5, timeEnabled: false });
+    const pj = JSON.parse(new URLSearchParams(calls.at(-1).body).get('json'));
+    assert.equal(pj.max_ratio_act, 0, 'al limite si ferma, mai rimozione');
+    assert.equal(pj.max_ratio, 1.5);
+    await qbittorrent.actions.add(ctx, { urls: ['magnet:?xt=urn:btih:' + H], category: 'Anime', stopped: true });
+    assert.match(calls.at(-1).ct, /multipart\/form-data/);
+    assert.match(calls.at(-1).body, /name="category"\r\n\r\nAnime/);
+    await assert.rejects(qbittorrent.actions.add(ctx, { urls: ['javascript:alert(1)'] }), /magnet o http/);
+    await assert.rejects(qbittorrent.actions.add(ctx, { torrentBase64: Buffer.from('non un torrent').toString('base64') }), /non sembra/);
+    await qbittorrent.actions.add(ctx, { torrentBase64: Buffer.from('d8:announce0:e').toString('base64'), fileName: '../evil.torrent' });
+    assert.match(calls.at(-1).body, /filename="\.\._evil\.torrent"/);
+    const s = await qbittorrent.actions.searchStart(ctx, { pattern: 'big buck bunny', category: 'movies' });
+    assert.equal(s.id, 7);
+    const r = await qbittorrent.actions.searchResults(ctx, { id: 7 });
+    assert.deepEqual(r.results.map((x) => x.name), ['Molti seed', 'Poco seed'], 'ordinati per seeder, link non magnet/http scartati');
+    assert.equal(r.results[0].info, null, 'link descrizione non http scartato');
+  } finally {
+    srv.close();
+  }
+});

@@ -74,6 +74,13 @@ export class MediaBridge {
     return r;
   }
 
+  /** File dei torrent indicati che il motore media non ha ancora portato in libreria. */
+  async pendingFor(hashes: string[]): Promise<string[]> {
+    const items = await this.media.json<{ torrentHash: string; fileName: string; status: string }[]>('GET', '/v1/items?limit=1000');
+    const set = new Set(hashes.map((h) => h.toLowerCase()));
+    return items.filter((i) => set.has(i.torrentHash.toLowerCase()) && !['imported', 'indexed', 'ignored'].includes(i.status)).map((i) => i.fileName);
+  }
+
   register(app: FastifyInstance, audit: Audit, viewer: object, admin: object) {
     const m = this.media;
     const who = (req: FastifyRequest) => (req.user as SessionUser).username;

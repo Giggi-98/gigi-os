@@ -17,6 +17,7 @@ import {
   Workflow,
   Wand2,
   DatabaseBackup,
+  Download,
   X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -40,6 +41,7 @@ const NAV: { group: string; items: Item[] }[] = [
     group: 'Servizi',
     items: [
       { to: '/media', label: 'Media', icon: <Clapperboard /> },
+      { to: '/download', label: 'Download', icon: <Download /> },
       { to: '/media-automation', label: 'Media automation', icon: <Wand2 /> },
       { to: '/armony', label: 'Armony', icon: <Music2 /> },
     ],

@@ -98,3 +98,10 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 
 **Scelta.** Connettore Armony con chiave `arm_…` in Bearer: `/api/me`, `/api/live/stato`, `/api/stato`, `/api/log`. Comandi limitati a play/pause/toggle/next/prev/volume (niente transfer/handoff/enqueue). Registro e stato del server solo per gli admin; ogni comando va nell’audit.
 **Da rivedere se** Armony espone nuove capability utili (download, notifiche) o se serve il canale `/api/live` in streaming al posto del polling ogni 5 s.
+
+## D-016 — Controllo torrent tramite le API di qBittorrent (2026-10-16)
+
+**Scelta.** Ricerca, aggiunta e gestione passano esclusivamente dalla WebUI API di qBittorrent (5.2, WebAPI 2.15). La ricerca usa il motore integrato con i plugin che l’utente ha già installato; GIGI OS non installa né gestisce plugin. I link aggiunti (magnet o http) li scarica qBittorrent, non GIGI OS.
+**Salvaguardie.** Le operazioni sono in allowlist (start/stop/recheck/reannounce, categoria, limiti, aggiunta, eliminazione), solo per gli admin e sempre in audit (il contenuto dei file `.torrent` non viene salvato). L’azione globale al raggiungimento dei limiti viene forzata su «ferma». Eliminare *con i file* è rifiutato se il motore media ha elementi di quel torrent non ancora importati; si può forzare solo con una seconda conferma esplicita.
+**Alternative scartate.** Prowlarr/Jackett come indicizzatori separati: sono servizi in più, e l’utente li ha rimossi.
+**Da rivedere se** servono le notifiche di download completato in tempo reale (oggi c’è un polling ogni 3 s solo con la pagina aperta).

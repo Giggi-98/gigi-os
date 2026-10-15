@@ -96,6 +96,11 @@ export function MediaPage() {
           <section>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <Download className="size-4 text-muted" /> Download {qb && <StatusBadge status={qb.status} />}
+              {qb && qb.status !== 'unconfigured' && (
+                <Link to="/download" className="ml-auto">
+                  <Button size="sm">Gestisci, cerca e aggiungi</Button>
+                </Link>
+              )}
             </h2>
             {!qb || qb.status === 'unconfigured' ? <Setup type="qbittorrent" label="qBittorrent" /> : <Torrents qb={qb} />}
           </section>

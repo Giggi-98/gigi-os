@@ -11,6 +11,7 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { ArmonyPage } from './pages/Armony';
 import { Dashboard } from './pages/Dashboard';
 import { DockerPage } from './pages/Docker';
+import { DownloadsPage } from './pages/Downloads';
 import { IntegrationsPage } from './pages/Integrations';
 import { Login } from './pages/Login';
 import { MediaPage } from './pages/Media';
@@ -46,6 +47,7 @@ function App() {
         <Route path="docker" element={<DockerPage />} />
         <Route path="media" element={<MediaPage />} />
         <Route path="media-automation" element={<MediaAutomationPage />} />
+        <Route path="download" element={<DownloadsPage />} />
         <Route path="armony" element={<ArmonyPage />} />
         <Route path="integrazioni" element={<IntegrationsPage />} />
         <Route path="sicurezza" element={<SecurityPage />} />
