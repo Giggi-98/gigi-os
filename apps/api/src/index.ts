@@ -55,6 +55,7 @@ async function main() {
     logger: { level: config.logLevel },
     https: tls,
     media,
+    filesSocket: config.filesSocket,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

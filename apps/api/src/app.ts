@@ -32,6 +32,7 @@ export type Deps = {
   trustProxy?: boolean;
   https?: { cert: Buffer; key: Buffer } | null;
   media?: MediaBridge;
+  filesSocket?: string;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

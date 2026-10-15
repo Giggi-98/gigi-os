@@ -6,6 +6,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/agent/package.json apps/agent/
 COPY apps/api/package.json apps/api/
 COPY apps/media/package.json apps/media/
+COPY apps/files/package.json apps/files/
 COPY apps/web/package.json apps/web/
 RUN npm ci --no-audit --no-fund
 COPY apps apps
@@ -17,6 +18,7 @@ COPY package.json package-lock.json ./
 COPY apps/agent/package.json apps/agent/
 COPY apps/api/package.json apps/api/
 COPY apps/media/package.json apps/media/
+COPY apps/files/package.json apps/files/
 COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev --no-audit --no-fund -w apps/agent -w apps/api --include-workspace-root=false
 
@@ -30,6 +32,8 @@ COPY --from=build /src/apps/api/package.json apps/api/package.json
 COPY --from=build /src/apps/api/dist apps/api/dist
 COPY --from=build /src/apps/media/package.json apps/media/package.json
 COPY --from=build /src/apps/media/dist apps/media/dist
+COPY --from=build /src/apps/files/package.json apps/files/package.json
+COPY --from=build /src/apps/files/dist apps/files/dist
 COPY --from=build /src/apps/web/dist apps/web/dist
 COPY package.json ./
 # /run/gigi ospita i socket agent/media ↔ api: il volume nominato eredita questi permessi al primo avvio.

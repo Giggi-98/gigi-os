@@ -3,11 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Badge, Card, PageHeader } from '../components/ui';
 
 const MODULES: Record<string, { title: string; phase: string; points: string[] }> = {
-  file: {
-    title: 'File manager',
-    phase: 'V4',
-    points: ['Solo directory consentite, protezione da path traversal e symlink', 'Vista dedicata alle librerie media', 'Conferme e anteprima per operazioni multiple'],
-  },
   automazioni: {
     title: 'Automazioni',
     phase: 'V4',

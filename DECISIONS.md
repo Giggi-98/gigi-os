@@ -105,3 +105,10 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Salvaguardie.** Le operazioni sono in allowlist (start/stop/recheck/reannounce, categoria, limiti, aggiunta, eliminazione), solo per gli admin e sempre in audit (il contenuto dei file `.torrent` non viene salvato). L’azione globale al raggiungimento dei limiti viene forzata su «ferma». Eliminare *con i file* è rifiutato se il motore media ha elementi di quel torrent non ancora importati; si può forzare solo con una seconda conferma esplicita.
 **Alternative scartate.** Prowlarr/Jackett come indicizzatori separati: sono servizi in più, e l’utente li ha rimossi.
 **Da rivedere se** servono le notifiche di download completato in tempo reale (oggi c’è un polling ogni 3 s solo con la pagina aperta).
+
+## D-017 — File manager in un worker separato, senza rete, con cestino (2026-10-16)
+
+**Scelta.** `gigi-files` (`network_mode: none`, utente 1000, rootfs in sola lettura) espone le operazioni via socket Unix. Ogni percorso viene risolto con `realpath` dentro le radici consentite (`/srv/downloads`, `/srv/media`), quindi niente `..` e niente symlink verso l’esterno. «Elimina» è un `rename` in `<radice>/.gigi-trash/<lotto>` (istantaneo e ripristinabile); l’unica cancellazione definitiva è lo svuotamento del cestino, con conferma scritta. Upload su un file temporaneo con rinomina atomica; nessuna operazione sovrascrive. La copia è limitata a 4 GB: sullo stesso disco si usa l’hardlink.
+**Perché separato da gigi-media.** Il motore media conserva la garanzia di non eliminare mai nulla (D-011). Un bug del file manager non può toccare la logica di import, e viceversa.
+**Download dei file.** Il download e l’anteprima inline sono serviti con `Content-Security-Policy: sandbox` e `nosniff`; inline solo immagini, video, audio e PDF, tutto il resto come allegato.
+**Da rivedere se** servono altre radici (es. `/home/gigi/armony/musica`): basta aggiungerle a `GIGI_FILES_ROOTS` e al mount.

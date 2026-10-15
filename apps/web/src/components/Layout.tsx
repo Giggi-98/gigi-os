@@ -35,6 +35,7 @@ const NAV: { group: string; items: Item[] }[] = [
     items: [
       { to: '/sistema', label: 'Sistema', icon: <Server /> },
       { to: '/docker', label: 'Docker', icon: <Boxes /> },
+      { to: '/file', label: 'File', icon: <FolderTree /> },
     ],
   },
   {
@@ -56,7 +57,6 @@ const NAV: { group: string; items: Item[] }[] = [
   {
     group: 'In arrivo',
     items: [
-      { to: '/in-arrivo/file', label: 'File manager', icon: <FolderTree />, soon: true },
       { to: '/in-arrivo/automazioni', label: 'Automazioni', icon: <Workflow />, soon: true },
       { to: '/in-arrivo/backup', label: 'Backup', icon: <DatabaseBackup />, soon: true },
     ],

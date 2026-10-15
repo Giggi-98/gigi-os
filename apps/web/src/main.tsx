@@ -12,6 +12,7 @@ import { ArmonyPage } from './pages/Armony';
 import { Dashboard } from './pages/Dashboard';
 import { DockerPage } from './pages/Docker';
 import { DownloadsPage } from './pages/Downloads';
+import { FilesPage } from './pages/Files';
 import { IntegrationsPage } from './pages/Integrations';
 import { Login } from './pages/Login';
 import { MediaPage } from './pages/Media';
@@ -48,6 +49,8 @@ function App() {
         <Route path="media" element={<MediaPage />} />
         <Route path="media-automation" element={<MediaAutomationPage />} />
         <Route path="download" element={<DownloadsPage />} />
+        <Route path="file" element={<FilesPage />} />
+        <Route path="in-arrivo/file" element={<Navigate to="/file" replace />} />
         <Route path="armony" element={<ArmonyPage />} />
         <Route path="integrazioni" element={<IntegrationsPage />} />
         <Route path="sicurezza" element={<SecurityPage />} />

@@ -8,11 +8,12 @@
     "apps/agent",
     "apps/api",
     "apps/media",
+    "apps/files",
     "apps/web"
   ],
   "scripts": {
-    "build": "npm run build -w apps/agent && npm run build -w apps/api && npm run build -w apps/media && npm run build -w apps/web",
-    "test": "npm run build -w apps/agent && npm run build -w apps/api && npm run build -w apps/media && node --test --test-reporter=spec tests/*.test.mjs",
+    "build": "npm run build -w apps/agent && npm run build -w apps/api && npm run build -w apps/media && npm run build -w apps/files && npm run build -w apps/web",
+    "test": "npm run build -w apps/agent && npm run build -w apps/api && npm run build -w apps/media && npm run build -w apps/files && node --test --test-reporter=spec tests/*.test.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {

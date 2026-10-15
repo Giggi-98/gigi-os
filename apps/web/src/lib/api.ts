@@ -1,6 +1,7 @@
 // Client API: cookie di sessione HttpOnly + header CSRF per le mutazioni. Nessun token in localStorage.
 let csrf: string | null = null;
 export const setCsrf = (t: string | null) => (csrf = t);
+export const getCsrf = () => csrf;
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public body?: unknown) {

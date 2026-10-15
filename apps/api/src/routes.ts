@@ -6,6 +6,7 @@ import { connectors, AUTO_SEED } from './connectors/index.js';
 import { jellyfinImage } from './connectors/jellyfin.js';
 import { ConnectorError } from './connectors/types.js';
 import { integrationInput } from './integrations.js';
+import { registerFiles } from './files.js';
 import { COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
@@ -503,6 +504,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   });
 
   d.media?.register(app, audit, viewer, admin);
+  if (d.filesSocket) registerFiles(app, d.filesSocket, audit, admin);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }

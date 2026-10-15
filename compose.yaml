@@ -32,7 +32,7 @@ services:
       # statfs su un file del filesystem root restituisce lo spazio di "/" senza montare directory dell'host
       GIGI_DISKS: "Sistema (/)=/host/hostname"
       GIGI_CONTROL_ALLOW: ${GIGI_CONTROL_ALLOW:-*}
-      GIGI_PROTECTED_CONTAINERS: gigi-agent,gigi-api,gigi-media
+      GIGI_PROTECTED_CONTAINERS: gigi-agent,gigi-api,gigi-media,gigi-files
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - gigi-run:/run/gigi
@@ -94,6 +94,26 @@ services:
       # Il codice non elimina, non sposta e non sovrascrive mai file (vedi DECISIONS D-011).
       - /srv:/srv
       - ./data/media:/data
+      - gigi-run:/run/gigi
+
+  files:
+    <<: *hardening
+    container_name: gigi-files
+    command: ["node", "apps/files/dist/index.js"]
+    # Nessuna rete: lavora solo sul filesystem e sul socket Unix condiviso con gigi-api.
+    network_mode: none
+    depends_on: [agent]
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      GIGI_FILES_SOCKET: /run/gigi/files.sock
+      GIGI_FILES_ROOTS: Download=/srv/downloads,Media=/srv/media
+      GIGI_PASSWD_FILE: /host/passwd
+    volumes:
+      # /srv intero per consentire spostamenti e hardlink tra Download e Media (stesso mount);
+      # l'accesso è comunque confinato alle radici in GIGI_FILES_ROOTS.
+      - /srv:/srv
+      - /etc/passwd:/host/passwd:ro
       - gigi-run:/run/gigi
 
 volumes:
