@@ -1,0 +1,474 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
+import type { Deps } from './app.js';
+import { connectors, AUTO_SEED } from './connectors/index.js';
+import { jellyfinImage } from './connectors/jellyfin.js';
+import { ConnectorError } from './connectors/types.js';
+import { integrationInput } from './integrations.js';
+import { COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
+
+const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+const UUID = /^[0-9a-f-]{36}$/;
+
+type Authed = FastifyRequest & { user: SessionUser };
+
+export async function registerRoutes(app: FastifyInstance, d: Deps) {
+  const { db, agent, integrations, events, sessions, limiter, audit } = d;
+
+  const auth =
+    (role?: Role) =>
+    async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!req.user) return void reply.code(401).send({ error: 'Autenticazione richiesta' });
+      if (role === 'admin' && req.user.role !== 'admin') {
+        audit.log(req, 'access.denied', 'denied', req.routeOptions.url ?? req.url);
+        return void reply.code(403).send({ error: 'Permesso riservato agli amministratori' });
+      }
+    };
+  const viewer = { preHandler: auth() };
+  const admin = { preHandler: auth('admin') };
+
+  const setCookie = (reply: FastifyReply, token: string) =>
+    reply.setCookie(COOKIE, token, {
+      httpOnly: true,
+      secure: d.secureCookies,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 86400,
+    });
+
+  const userCount = () => (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+  const adminCount = () => (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0").get() as { n: number }).n;
+
+  // ───────────── Autenticazione ─────────────
+  app.get('/api/v1/auth/state', async (req) => ({
+    setupRequired: userCount() === 0,
+    user: req.user ? { id: req.user.id, username: req.user.username, role: req.user.role, csrf: req.user.csrf } : null,
+  }));
+
+  const credentials = z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/), password: z.string().min(1).max(256) });
+
+  app.post(
+    '/api/v1/auth/setup',
+    { config: { rateLimit: { max: 5, timeWindow: '15 minutes' } } },
+    async (req, reply) => {
+      if (userCount() > 0) return reply.code(409).send({ error: 'Setup già completato' });
+      const body = credentials.extend({ setupToken: z.string().min(1).max(200) }).parse(req.body);
+      const expected = d.setupToken();
+      const ok =
+        !!expected &&
+        body.setupToken.length === expected.length &&
+        timingSafeEqual(Buffer.from(body.setupToken), Buffer.from(expected));
+      if (!ok) {
+        audit.log(req, 'auth.setup', 'denied', body.username, { reason: 'setup token errato' });
+        return reply.code(403).send({ error: 'Codice di setup non valido (vedi i log di gigi-api)' });
+      }
+      const problem = passwordProblems(body.password, body.username);
+      if (problem) return reply.code(400).send({ error: problem });
+      const id = newId();
+      const now = Date.now();
+      db.prepare('INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES (?,?,?,?,?,?)').run(
+        id,
+        body.username,
+        await hashPassword(body.password),
+        'admin',
+        now,
+        now,
+      );
+      d.consumeSetupToken();
+      integrations.seed(AUTO_SEED);
+      void integrations.checkAll();
+      const s = sessions.create(id, req.ip, req.headers['user-agent'] ?? '');
+      setCookie(reply, s.token);
+      req.user = { id, username: body.username, role: 'admin', csrf: s.csrf, tokenHash: '' };
+      audit.log(req, 'auth.setup', 'ok', body.username);
+      return { user: { id, username: body.username, role: 'admin', csrf: s.csrf } };
+    },
+  );
+
+  app.post(
+    '/api/v1/auth/login',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const body = credentials.safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: 'Credenziali non valide' });
+      const { username, password } = body.data;
+      const keys = [`ip:${req.ip}`, `user:${username.toLowerCase()}`];
+      if (limiter.blocked(keys)) {
+        audit.log(req, 'auth.login', 'denied', username, { reason: 'troppi tentativi' });
+        return reply.code(429).send({ error: 'Troppi tentativi falliti. Riprova tra qualche minuto.' });
+      }
+      const u = db.prepare('SELECT id, username, password_hash, role, disabled FROM users WHERE username = ?').get(username) as
+        | { id: string; username: string; password_hash: string; role: Role; disabled: number }
+        | undefined;
+      const valid = await verifyPassword(password, u?.password_hash ?? DUMMY_HASH);
+      if (!u || !valid || u.disabled) {
+        limiter.fail(keys);
+        audit.log(req, 'auth.login', 'denied', username);
+        return reply.code(401).send({ error: 'Utente o password errati' });
+      }
+      limiter.clear([`user:${username.toLowerCase()}`]);
+      db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), u.id);
+      const s = sessions.create(u.id, req.ip, req.headers['user-agent'] ?? '');
+      setCookie(reply, s.token);
+      req.user = { id: u.id, username: u.username, role: u.role, csrf: s.csrf, tokenHash: '' };
+      audit.log(req, 'auth.login', 'ok', u.username);
+      return { user: { id: u.id, username: u.username, role: u.role, csrf: s.csrf } };
+    },
+  );
+
+  app.post('/api/v1/auth/logout', viewer, async (req, reply) => {
+    const r = req as Authed;
+    sessions.destroy(r.user.tokenHash);
+    audit.log(req, 'auth.logout', 'ok', r.user.username);
+    reply.clearCookie(COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
+  app.post('/api/v1/auth/password', viewer, async (req, reply) => {
+    const r = req as Authed;
+    const body = z.object({ current: z.string().max(256), next: z.string().max(256) }).parse(req.body);
+    const u = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(r.user.id) as { password_hash: string };
+    if (!(await verifyPassword(body.current, u.password_hash))) {
+      audit.log(req, 'auth.password', 'denied', r.user.username);
+      return reply.code(403).send({ error: 'Password attuale errata' });
+    }
+    const problem = passwordProblems(body.next, r.user.username);
+    if (problem) return reply.code(400).send({ error: problem });
+    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(await hashPassword(body.next), Date.now(), r.user.id);
+    sessions.destroyForUser(r.user.id, r.user.tokenHash);
+    audit.log(req, 'auth.password', 'ok', r.user.username);
+    return { ok: true };
+  });
+
+  app.get('/api/v1/auth/sessions', viewer, async (req) => {
+    const r = req as Authed;
+    return (
+      db
+        .prepare('SELECT token_hash, created_at, last_seen, ip, user_agent FROM sessions WHERE user_id = ? ORDER BY last_seen DESC')
+        .all(r.user.id) as { token_hash: string; created_at: number; last_seen: number; ip: string; user_agent: string }[]
+    ).map((s) => ({
+      id: s.token_hash.slice(0, 16),
+      current: s.token_hash === r.user.tokenHash,
+      createdAt: s.created_at,
+      lastSeen: s.last_seen,
+      ip: s.ip,
+      userAgent: s.user_agent,
+    }));
+  });
+
+  app.post('/api/v1/auth/sessions/revoke-others', viewer, async (req) => {
+    const r = req as Authed;
+    sessions.destroyForUser(r.user.id, r.user.tokenHash);
+    audit.log(req, 'auth.sessions.revoke', 'ok', r.user.username);
+    return { ok: true };
+  });
+
+  // ───────────── Utenti (admin) ─────────────
+  app.get('/api/v1/users', admin, async () =>
+    (
+      db.prepare('SELECT id, username, role, disabled, created_at, last_login_at FROM users ORDER BY created_at').all() as {
+        id: string;
+        username: string;
+        role: Role;
+        disabled: number;
+        created_at: number;
+        last_login_at: number | null;
+      }[]
+    ).map((u) => ({ id: u.id, username: u.username, role: u.role, disabled: !!u.disabled, createdAt: u.created_at, lastLoginAt: u.last_login_at })),
+  );
+
+  app.post('/api/v1/users', admin, async (req, reply) => {
+    const body = credentials.extend({ role: z.enum(['admin', 'viewer']) }).parse(req.body);
+    const problem = passwordProblems(body.password, body.username);
+    if (problem) return reply.code(400).send({ error: problem });
+    if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(body.username)) return reply.code(409).send({ error: 'Nome utente già esistente' });
+    const id = newId();
+    const now = Date.now();
+    db.prepare('INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES (?,?,?,?,?,?)').run(
+      id,
+      body.username,
+      await hashPassword(body.password),
+      body.role,
+      now,
+      now,
+    );
+    audit.log(req, 'user.create', 'ok', body.username, { role: body.role });
+    return { id };
+  });
+
+  app.patch('/api/v1/users/:id', admin, async (req, reply) => {
+    const r = req as Authed;
+    const { id } = req.params as { id: string };
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const body = z
+      .object({ role: z.enum(['admin', 'viewer']).optional(), disabled: z.boolean().optional(), password: z.string().max(256).optional() })
+      .parse(req.body);
+    const u = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(id) as
+      | { id: string; username: string; role: Role; disabled: number }
+      | undefined;
+    if (!u) return reply.code(404).send({ error: 'Utente non trovato' });
+    const losingAdmin = u.role === 'admin' && !u.disabled && (body.role === 'viewer' || body.disabled === true);
+    if (losingAdmin && adminCount() <= 1) return reply.code(409).send({ error: "Deve restare almeno un amministratore attivo" });
+    if (id === r.user.id && (body.disabled || body.role === 'viewer')) return reply.code(409).send({ error: 'Non puoi disabilitare o declassare te stesso' });
+    if (body.password !== undefined) {
+      const problem = passwordProblems(body.password, u.username);
+      if (problem) return reply.code(400).send({ error: problem });
+      db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(await hashPassword(body.password), Date.now(), id);
+      sessions.destroyForUser(id);
+    }
+    if (body.role) db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?').run(body.role, Date.now(), id);
+    if (body.disabled !== undefined) {
+      db.prepare('UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?').run(body.disabled ? 1 : 0, Date.now(), id);
+      if (body.disabled) sessions.destroyForUser(id);
+    }
+    audit.log(req, 'user.update', 'ok', u.username, { role: body.role, disabled: body.disabled, passwordReset: body.password !== undefined });
+    return { ok: true };
+  });
+
+  app.delete('/api/v1/users/:id', admin, async (req, reply) => {
+    const r = req as Authed;
+    const { id } = req.params as { id: string };
+    if (id === r.user.id) return reply.code(409).send({ error: 'Non puoi eliminare te stesso' });
+    const u = db.prepare('SELECT username, role FROM users WHERE id = ?').get(id) as { username: string; role: Role } | undefined;
+    if (!u) return reply.code(404).send({ error: 'Utente non trovato' });
+    if (u.role === 'admin' && adminCount() <= 1) return reply.code(409).send({ error: 'Deve restare almeno un amministratore' });
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    audit.log(req, 'user.delete', 'ok', u.username);
+    return { ok: true };
+  });
+
+  app.get('/api/v1/audit', admin, async (req) => {
+    const q = req.query as { limit?: string; before?: string };
+    const limit = Math.min(Number(q.limit ?? 100) || 100, 500);
+    const before = Number(q.before ?? Number.MAX_SAFE_INTEGER);
+    return db.prepare('SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit);
+  });
+
+  // ───────────── Sistema e Docker (via agent) ─────────────
+  app.get('/api/v1/system', viewer, async () => agent.json('GET', '/v1/system'));
+  app.get('/api/v1/system/history', viewer, async (req) => {
+    const minutes = Math.min(Number((req.query as { minutes?: string }).minutes ?? 60) || 60, 60);
+    return agent.json('GET', `/v1/system/history?since=${Date.now() - minutes * 60_000}`);
+  });
+  app.get('/api/v1/docker/info', viewer, async () => agent.json('GET', '/v1/docker/info'));
+  app.get('/api/v1/docker/containers', viewer, async () => agent.json('GET', '/v1/containers'));
+  app.get('/api/v1/docker/images', viewer, async () => agent.json('GET', '/v1/images'));
+  app.get('/api/v1/docker/volumes', viewer, async () => agent.json('GET', '/v1/volumes'));
+  app.get('/api/v1/docker/networks', viewer, async () => agent.json('GET', '/v1/networks'));
+
+  app.get('/api/v1/docker/containers/:id', viewer, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!ID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const data = await agent.json<Record<string, unknown>>('GET', `/v1/containers/${encodeURIComponent(id)}`);
+    // Variabili d'ambiente, comandi ed etichette (già oscurati) solo agli admin
+    if (req.user?.role !== 'admin') {
+      data.env = null;
+      data.cmd = null;
+      data.entrypoint = null;
+      data.labels = null;
+    }
+    return data;
+  });
+
+  // Log in streaming via Server-Sent Events (stessa sessione/cookie, nessun token in URL). Solo admin.
+  app.get('/api/v1/docker/containers/:id/logs', admin, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!ID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const q = req.query as { tail?: string; follow?: string };
+    const tail = Math.min(Number(q.tail ?? 300) || 300, 5000);
+    const follow = q.follow === '1';
+    const stream = await agent.stream(`/v1/containers/${encodeURIComponent(id)}/logs?tail=${tail}&follow=${follow ? 1 : 0}`);
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      connection: 'keep-alive',
+      'x-content-type-options': 'nosniff',
+    });
+    let buf = '';
+    stream.on('data', (c: Buffer) => {
+      buf += c.toString('utf8');
+      let i: number;
+      while ((i = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 1);
+        if (line) reply.raw.write(`data: ${line}\n\n`);
+      }
+    });
+    const ping = setInterval(() => reply.raw.write(': ping\n\n'), 20000);
+    const end = () => {
+      clearInterval(ping);
+      reply.raw.write('event: end\ndata: {}\n\n');
+      reply.raw.end();
+    };
+    stream.on('end', end);
+    stream.on('error', end);
+    req.raw.on('close', () => {
+      clearInterval(ping);
+      stream.destroy();
+    });
+  });
+
+  app.post('/api/v1/docker/containers/:id/actions', admin, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!ID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const body = z.object({ action: z.enum(['start', 'stop', 'restart']), confirm: z.string().max(128).optional() }).parse(req.body);
+    const c = await agent.json<{ name: string; controllable: boolean }>('GET', `/v1/containers/${encodeURIComponent(id)}`);
+    if (!c.controllable) {
+      audit.log(req, `docker.${body.action}`, 'denied', c.name, { reason: 'non controllabile' });
+      return reply.code(403).send({ error: `Il container ${c.name} è protetto` });
+    }
+    if (body.action !== 'start' && body.confirm !== c.name) {
+      return reply.code(400).send({ error: 'Conferma richiesta: digita il nome esatto del container' });
+    }
+    try {
+      const r = await agent.json('POST', `/v1/containers/${encodeURIComponent(id)}/${body.action}`, 60000);
+      audit.log(req, `docker.${body.action}`, 'ok', c.name);
+      events.add('info', 'docker', `${c.name}: ${body.action} richiesto da ${(req as Authed).user.username}`);
+      return r;
+    } catch (e) {
+      audit.log(req, `docker.${body.action}`, 'error', c.name, { err: (e as Error).message });
+      throw e;
+    }
+  });
+
+  // ───────────── Integrazioni ─────────────
+  app.get('/api/v1/integrations/types', viewer, async () =>
+    Object.values(connectors).map((c) => ({
+      type: c.type,
+      label: c.label,
+      description: c.description,
+      defaultUrl: c.defaultUrl,
+      defaultWebUrl: c.defaultWebUrl ?? null,
+      defaultName: c.defaultName,
+      defaultContainer: c.defaultContainer ?? null,
+      auth: c.auth,
+      configFields: c.configFields ?? [],
+      capabilities: c.capabilities,
+      resources: Object.keys(c.resources),
+    })),
+  );
+  app.get('/api/v1/integrations', viewer, async () => integrations.list());
+
+  app.post('/api/v1/integrations', admin, async (req) => {
+    const body = integrationInput.parse(req.body);
+    const id = integrations.create(body);
+    audit.log(req, 'integration.create', 'ok', `${body.type}:${body.name}`);
+    await integrations.check(id).catch(() => undefined);
+    return integrations.get(id);
+  });
+
+  app.post('/api/v1/integrations/test', admin, async (req) => {
+    const body = integrationInput.extend({ id: z.string().regex(UUID).optional() }).parse(req.body);
+    const r = await integrations.testDraft(body, body.id);
+    audit.log(req, 'integration.test', 'ok', `${body.type}:${body.name}`, { status: r.status });
+    return r;
+  });
+
+  app.put('/api/v1/integrations/:id', admin, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const body = integrationInput.parse(req.body);
+    integrations.update(id, body);
+    audit.log(req, 'integration.update', 'ok', `${body.type}:${body.name}`, { secretRotated: !!body.secret && Object.values(body.secret).some(Boolean) });
+    await integrations.check(id).catch(() => undefined);
+    return integrations.get(id);
+  });
+
+  app.delete('/api/v1/integrations/:id', admin, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const i = integrations.get(id);
+    integrations.remove(id);
+    audit.log(req, 'integration.delete', 'ok', `${i.type}:${i.name}`);
+    return { ok: true };
+  });
+
+  app.post('/api/v1/integrations/:id/check', viewer, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    await integrations.check(id);
+    return integrations.get(id);
+  });
+
+  app.get('/api/v1/integrations/:id/resources/:name', viewer, async (req, reply) => {
+    const { id, name } = req.params as { id: string; name: string };
+    if (!UUID.test(id) || !/^[a-z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
+    return integrations.resource(id, name, new URLSearchParams(req.query as Record<string, string>));
+  });
+
+  app.get('/api/v1/integrations/:id/jellyfin/image/:itemId', viewer, async (req, reply) => {
+    const { id, itemId } = req.params as { id: string; itemId: string };
+    if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+    const { row, ctx } = integrations.contextFor(id);
+    if (row.type !== 'jellyfin') throw new ConnectorError('Non è un\'integrazione Jellyfin', 'error', 400);
+    const img = await jellyfinImage(ctx, itemId);
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(img.type)) return reply.code(502).send({ error: 'Tipo immagine non atteso' });
+    return reply.header('Cache-Control', 'private, max-age=3600').type(img.type).send(img.body);
+  });
+
+  // ───────────── Dashboard ─────────────
+  app.get('/api/v1/overview', viewer, async () => {
+    const [system, containers] = await Promise.allSettled([
+      agent.json<Record<string, unknown>>('GET', '/v1/system'),
+      agent.json<{ name: string; state: string; health: string | null; restartCount: number }[]>('GET', '/v1/containers'),
+    ]);
+    const list = containers.status === 'fulfilled' ? containers.value : [];
+    return {
+      system: system.status === 'fulfilled' ? system.value : null,
+      systemError: system.status === 'rejected' ? (system.reason as Error).message : null,
+      containers: containers.status === 'fulfilled' ? {
+        total: list.length,
+        running: list.filter((c) => c.state === 'running').length,
+        stopped: list.filter((c) => c.state !== 'running').length,
+        unhealthy: list.filter((c) => c.health === 'unhealthy').map((c) => c.name),
+        restarting: list.filter((c) => c.state === 'restarting').map((c) => c.name),
+        list,
+      } : null,
+      containersError: containers.status === 'rejected' ? (containers.reason as Error).message : null,
+      integrations: integrations.list(),
+      events: events.list(15),
+    };
+  });
+
+  app.get('/api/v1/events', viewer, async (req) => {
+    const q = req.query as { limit?: string; level?: 'info' | 'warning' | 'error' };
+    return events.list(Math.min(Number(q.limit ?? 50) || 50, 500), q.level);
+  });
+
+  const layoutSchema = z.object({
+    version: z.number().int().min(1).max(100),
+    widgets: z
+      .array(
+        z.object({
+          i: z.string().min(1).max(60).regex(/^[a-z0-9:_-]+$/i),
+          type: z.string().min(1).max(40),
+          x: z.number().int().min(0).max(48),
+          y: z.number().int().min(0).max(500),
+          w: z.number().int().min(1).max(48),
+          h: z.number().int().min(1).max(40),
+          options: z.record(z.union([z.string().max(200), z.number(), z.boolean()])).optional(),
+        }),
+      )
+      .max(40),
+  });
+
+  app.get('/api/v1/layout', viewer, async (req) => {
+    const r = db.prepare('SELECT layout FROM layouts WHERE user_id = ?').get((req as Authed).user.id) as { layout: string } | undefined;
+    return r ? JSON.parse(r.layout) : null;
+  });
+  app.put('/api/v1/layout', viewer, async (req) => {
+    const body = layoutSchema.parse(req.body);
+    db.prepare(
+      'INSERT INTO layouts (user_id, layout, updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET layout = excluded.layout, updated_at = excluded.updated_at',
+    ).run((req as Authed).user.id, JSON.stringify(body), Date.now());
+    return { ok: true };
+  });
+  app.delete('/api/v1/layout', viewer, async (req) => {
+    db.prepare('DELETE FROM layouts WHERE user_id = ?').run((req as Authed).user.id);
+    return { ok: true };
+  });
+
+  app.get('/api/v1/health', async () => ({ ok: true }));
+}

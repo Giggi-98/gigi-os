@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+secrets/*
+!secrets/.gitkeep
+data/*
+!data/.gitkeep
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+backup*/
+screenshots/

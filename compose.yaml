@@ -1,0 +1,76 @@
+# Stack dedicato di GIGI OS. Non dipende da altri stack e nessun altro stack dipende da questo:
+# se GIGI OS è fermo, Jellyfin, Apollo, qBittorrent, Armony e Home Assistant continuano a funzionare.
+name: gigi-os
+
+x-hardening: &hardening
+  image: gigi-os:${GIGI_VERSION:-0.1.0}
+  restart: unless-stopped
+  user: "1000:1000"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=16m"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  agent:
+    <<: *hardening
+    build: .
+    container_name: gigi-agent
+    command: ["node", "apps/agent/dist/index.js"]
+    # Rete host SOLO per leggere i contatori delle interfacce dell'host: l'agent non apre alcuna porta.
+    network_mode: host
+    group_add: ["${DOCKER_GID:-128}"]
+    mem_limit: 160m
+    cpus: 0.5
+    environment:
+      GIGI_AGENT_SOCKET: /run/gigi/agent.sock
+      GIGI_OS_RELEASE: /host/os-release
+      GIGI_HOSTNAME_FILE: /host/hostname
+      # statfs su un file del filesystem root restituisce lo spazio di "/" senza montare directory dell'host
+      GIGI_DISKS: "Sistema (/)=/host/hostname"
+      GIGI_CONTROL_ALLOW: ${GIGI_CONTROL_ALLOW:-*}
+      GIGI_PROTECTED_CONTAINERS: gigi-agent,gigi-api
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gigi-run:/run/gigi
+      - /etc/os-release:/host/os-release:ro
+      - /etc/hostname:/host/hostname:ro
+
+  api:
+    <<: *hardening
+    container_name: gigi-api
+    command: ["node", "apps/api/dist/index.js"]
+    # Rete host: i servizi da monitorare ascoltano anche su 127.0.0.1 (Navidrome, Jellyfin, Home Assistant).
+    # L'API si lega SOLO all'IP LAN indicato in GIGI_BIND; l'accesso è governato da UFW.
+    network_mode: host
+    depends_on: [agent]
+    mem_limit: 256m
+    cpus: 1.0
+    environment:
+      GIGI_BIND: ${GIGI_BIND:-192.168.222.200}
+      GIGI_PORT: ${GIGI_PORT:-8470}
+      GIGI_DATA_DIR: /data
+      GIGI_WEB_DIR: /app/apps/web/dist
+      GIGI_AGENT_SOCKET: /run/gigi/agent.sock
+      GIGI_MASTER_KEY_FILE: /secrets/master.key
+      GIGI_TLS_CERT: /secrets/tls.crt
+      GIGI_TLS_KEY: /secrets/tls.key
+      NODE_EXTRA_CA_CERTS: /secrets/tls.crt
+      GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-127.0.0.0/8,::1/128,192.168.222.0/24}
+      GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
+    volumes:
+      - ./data:/data
+      - ./secrets:/secrets:ro
+      - gigi-run:/run/gigi
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('https://'+process.env.GIGI_BIND+':'+process.env.GIGI_PORT+'/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  gigi-run:

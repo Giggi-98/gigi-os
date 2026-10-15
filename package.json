@@ -1,0 +1,24 @@
+{
+  "name": "gigi-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GIGI OS — homelab control center self-hosted per Gigi-Mini-Pc",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/agent",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w apps/agent && npm run build -w apps/api && npm run build -w apps/web",
+    "test": "npm run build -w apps/agent && npm run build -w apps/api && node --test --test-reporter=spec tests/*.test.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3"
+  }
+}

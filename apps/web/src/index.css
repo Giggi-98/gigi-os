@@ -1,0 +1,182 @@
+@import 'tailwindcss';
+@import 'react-grid-layout/css/styles.css';
+@import 'react-resizable/css/styles.css';
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Token di design: un'unica fonte per colori, superfici e stati. Dark predefinito. */
+:root {
+  --bg: #0b0c10;
+  --bg-2: #0f1116;
+  --surface: #13151b;
+  --surface-2: #181b22;
+  --surface-3: #1e222b;
+  --border: #23272f;
+  --border-strong: #2e333d;
+  --text: #e7e9ee;
+  --text-2: #a9afbb;
+  --muted: #7a8291;
+  --accent: #8b7bff;
+  --accent-2: #6f5cf5;
+  --accent-soft: rgb(139 123 255 / 0.14);
+  --ok: #3ecf8e;
+  --ok-soft: rgb(62 207 142 / 0.13);
+  --warn: #f5b041;
+  --warn-soft: rgb(245 176 65 / 0.13);
+  --err: #f2616f;
+  --err-soft: rgb(242 97 111 / 0.13);
+  --info: #4ea8ff;
+  --info-soft: rgb(78 168 255 / 0.13);
+  --idle: #6b7280;
+  --chart-1: #8b7bff;
+  --chart-2: #3ecf8e;
+  --chart-3: #4ea8ff;
+  --chart-4: #f5b041;
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: #f6f7f9;
+  --bg-2: #eef0f3;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-3: #eef0f4;
+  --border: #e3e6eb;
+  --border-strong: #d3d8df;
+  --text: #14171c;
+  --text-2: #424955;
+  --muted: #6b7280;
+  --accent: #6a56f0;
+  --accent-2: #5643dc;
+  --accent-soft: rgb(106 86 240 / 0.1);
+  --ok: #12a46b;
+  --ok-soft: rgb(18 164 107 / 0.1);
+  --warn: #c27c0e;
+  --warn-soft: rgb(194 124 14 / 0.11);
+  --err: #d6334a;
+  --err-soft: rgb(214 51 74 / 0.09);
+  --info: #1f7ae0;
+  --info-soft: rgb(31 122 224 / 0.09);
+  --chart-1: #6a56f0;
+  --chart-2: #12a46b;
+  --chart-3: #1f7ae0;
+  --chart-4: #c27c0e;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 8px 24px -16px rgb(16 24 40 / 0.18);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-fg-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-err: var(--err);
+  --color-err-soft: var(--err-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-idle: var(--idle);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --radius-card: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+::selection {
+  background: var(--accent-soft);
+}
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* react-grid-layout: integrazione con i token */
+.react-grid-item.react-grid-placeholder {
+  background: var(--accent) !important;
+  opacity: 0.12 !important;
+  border-radius: var(--radius-card);
+}
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--muted) !important;
+}
+.react-grid-item.react-draggable-dragging {
+  z-index: 20;
+}
+.react-grid-item {
+  transition: none;
+}
+.rgl-animate .react-grid-item {
+  transition: transform 180ms ease, width 180ms ease, height 180ms ease;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.04), transparent);
+  animation: shimmer 1.4s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
