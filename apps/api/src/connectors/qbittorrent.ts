@@ -110,6 +110,46 @@ function limit(v: unknown, max: number): number {
   return n;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function hashSet(ctx: ConnectorContext): Promise<Set<string>> {
+  const list = json<{ hash: string }[]>(await call(ctx, '/api/v2/torrents/info', 'Torrent'));
+  return new Set(list.map((t) => t.hash));
+}
+
+async function lastLogId(ctx: ConnectorContext): Promise<number> {
+  const l = json<{ id: number }[]>(await call(ctx, '/api/v2/log/main?normal=true&info=false&warning=true&critical=true&last_known_id=-1', 'Log'));
+  return l.length ? l[l.length - 1].id : -1;
+}
+
+function explain(msg: string) {
+  if (/bencod|expected value/i.test(msg)) return 'il link non porta a un file .torrent valido (probabilmente è una pagina web)';
+  if (/duplicate|already/i.test(msg)) return 'il torrent è già presente in qBittorrent';
+  if (/Forbidden|403/i.test(msg)) return 'il sito ha rifiutato lo scaricamento (403)';
+  if (/timed out|timeout/i.test(msg)) return 'il sito non ha risposto in tempo';
+  return msg.replace(/^Failed to add torrent\.?\s*/i, '').slice(0, 200);
+}
+
+/**
+ * qBittorrent accetta le aggiunte in modo asincrono: «Ok.» non significa che il torrent esista.
+ * Si attende che compaia un hash nuovo; se nel log compare un errore di aggiunta, lo si riporta.
+ */
+async function confirmAdded(ctx: ConnectorContext, before: Set<string>, logId: number, timeoutMs = 20_000): Promise<string[]> {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    await sleep(1000);
+    const now = await hashSet(ctx);
+    const added = [...now].filter((h) => !before.has(h));
+    if (added.length) return added;
+    const log = json<{ id: number; message: string }[]>(
+      await call(ctx, `/api/v2/log/main?normal=true&info=false&warning=true&critical=true&last_known_id=${logId}`, 'Log'),
+    );
+    const fail = log.find((e) => /failed to add torrent|duplicate torrent|already present|unable to download/i.test(e.message));
+    if (fail) throw new ConnectorError(`qBittorrent non ha aggiunto il torrent: ${explain(fail.message)}`, 'error', 409);
+  }
+  throw new ConnectorError('qBittorrent non ha aggiunto il torrent entro 20 secondi (link non valido o sito irraggiungibile)', 'error', 504);
+}
+
 export const qbittorrent: ConnectorDef = {
   type: 'qbittorrent',
   label: 'qBittorrent',
@@ -258,26 +298,38 @@ export const qbittorrent: ConnectorDef = {
     /** Aggiunta da magnet/URL oppure da file .torrent (base64). L'URL lo scarica qBittorrent, non GIGI OS. */
     async add(ctx, body) {
       const b = obj(body);
-      const fd = new FormData();
       const urls = (Array.isArray(b.urls) ? b.urls : []).map((u) => str(u, 4000)).filter(Boolean);
       if (urls.length > 20) throw new ConnectorError('Massimo 20 link alla volta', 'error', 400);
       for (const u of urls) if (!/^(magnet:\?xt=urn:bt[im]h:|https?:\/\/)/i.test(u)) throw new ConnectorError('Sono ammessi solo link magnet o http(s)', 'error', 400);
-      if (urls.length) fd.set('urls', urls.join('\n'));
-      if (typeof b.torrentBase64 === 'string' && b.torrentBase64) {
-        const buf = Buffer.from(b.torrentBase64, 'base64');
-        if (buf.length > 4 * 1024 * 1024) throw new ConnectorError('File .torrent troppo grande', 'error', 400);
-        if (buf[0] !== 0x64) throw new ConnectorError('Il file non sembra un .torrent valido', 'error', 400);
-        fd.set('torrents', new Blob([buf], { type: 'application/x-bittorrent' }), (str(b.fileName, 150) || 'file.torrent').replace(/[^\w.\- ]/g, '_'));
-      }
-      if (!urls.length && !fd.has('torrents')) throw new ConnectorError('Indica un link magnet o un file .torrent', 'error', 400);
       const category = str(b.category, 100);
-      if (category) fd.set('category', category);
-      if (b.stopped === true) fd.set('stopped', 'true');
-      if (b.sequential === true) fd.set('sequentialDownload', 'true');
-      const r = await call(ctx, '/api/v2/torrents/add', 'Aggiunta torrent', fd);
-      const text = r.body.toString('utf8').trim();
-      if (/^fails\.?$/i.test(text)) throw new ConnectorError('qBittorrent ha rifiutato il torrent (già presente o non valido)', 'error', 409);
-      return { ok: true };
+      const plugin = /^[a-z0-9_]{1,40}$/.test(str(b.plugin, 40)) ? str(b.plugin, 40) : '';
+      const before = await hashSet(ctx);
+      const logId = await lastLogId(ctx);
+
+      // Risultato di ricerca che punta a una pagina web: lo risolve il plugin, come fa l'interfaccia di qBittorrent
+      const viaPlugin = plugin && urls.length === 1 && /^https?:/i.test(urls[0]) && !/\.torrent(\?|$)/i.test(urls[0]);
+      if (viaPlugin) {
+        await call(ctx, '/api/v2/search/downloadTorrent', 'Download dal plugin', new URLSearchParams({ torrentUrl: urls[0], pluginName: plugin }));
+      } else {
+        const fd = new FormData();
+        if (urls.length) fd.set('urls', urls.join('\n'));
+        if (typeof b.torrentBase64 === 'string' && b.torrentBase64) {
+          const buf = Buffer.from(b.torrentBase64, 'base64');
+          if (buf.length > 4 * 1024 * 1024) throw new ConnectorError('File .torrent troppo grande', 'error', 400);
+          if (buf[0] !== 0x64) throw new ConnectorError('Il file non sembra un .torrent valido', 'error', 400);
+          fd.set('torrents', new Blob([buf], { type: 'application/x-bittorrent' }), (str(b.fileName, 150) || 'file.torrent').replace(/[^\w.\- ]/g, '_'));
+        }
+        if (!urls.length && !fd.has('torrents')) throw new ConnectorError('Indica un link magnet o un file .torrent', 'error', 400);
+        if (category) fd.set('category', category);
+        if (b.stopped === true) fd.set('stopped', 'true');
+        const r = await call(ctx, '/api/v2/torrents/add', 'Aggiunta torrent', fd);
+        if (/^fails\.?$/i.test(r.body.toString('utf8').trim())) throw new ConnectorError('qBittorrent ha rifiutato il torrent (già presente o non valido)', 'error', 409);
+      }
+      const added = await confirmAdded(ctx, before, logId);
+      // Il risolutore dei plugin non accetta categoria/stato: si applicano dopo, sul torrent appena comparso
+      if (viaPlugin && category) await call(ctx, '/api/v2/torrents/setCategory', 'Categoria', new URLSearchParams({ hashes: added.join('|'), category }));
+      if (viaPlugin && b.stopped === true) await call(ctx, '/api/v2/torrents/stop', 'Stop', new URLSearchParams({ hashes: added.join('|') }));
+      return { ok: true, hashes: added };
     },
     async searchStart(ctx, body) {
       const b = obj(body);
@@ -305,6 +357,7 @@ export const qbittorrent: ConnectorDef = {
           leechers: x.nbLeechers,
           site: x.siteUrl,
           engine: x.engineName ?? x.siteUrl.replace(/^https?:\/\/(www\.)?/, ''),
+          plugin: x.engineName && /^[a-z0-9_]{1,40}$/.test(x.engineName) ? x.engineName : null,
           info: /^https?:/i.test(x.descrLink) ? x.descrLink : null,
           published: x.pubDate ? x.pubDate * 1000 : null,
         }))

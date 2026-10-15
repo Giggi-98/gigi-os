@@ -260,6 +260,16 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     if (!/^[a-zA-Z0-9@._:-]{1,200}\.service$/.test(name)) return reply.code(400).send({ error: 'nome non valido' });
     return agent.json('GET', `/v1/systemd/services/${encodeURIComponent(name)}`);
   });
+  app.get('/api/v1/systemd/services/:name/journal', admin, async (req, reply) => {
+    const { name } = req.params as { name: string };
+    if (!/^[a-zA-Z0-9@._:\\-]{1,200}\.service$/.test(name)) return reply.code(400).send({ error: 'nome non valido' });
+    const lines = Math.min(Number((req.query as { lines?: string }).lines ?? 200) || 200, 1000);
+    return agent.json('GET', `/v1/systemd/services/${encodeURIComponent(name)}/journal?lines=${lines}`, 30_000);
+  });
+  app.get('/api/v1/journal/errors', admin, async (req) => {
+    const hours = Math.min(Number((req.query as { hours?: string }).hours ?? 24) || 24, 168);
+    return agent.json('GET', `/v1/journal/errors?hours=${hours}`, 30_000);
+  });
   app.get('/api/v1/docker/info', viewer, async () => agent.json('GET', '/v1/docker/info'));
   app.get('/api/v1/docker/containers', viewer, async () => agent.json('GET', '/v1/containers'));
   app.get('/api/v1/docker/images', viewer, async () => agent.json('GET', '/v1/images'));

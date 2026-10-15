@@ -49,7 +49,7 @@ type Torrent = {
   stopped: boolean;
 };
 type MediaItem = { torrentHash: string; status: string };
-type SearchResult = { name: string; url: string; size: number; seeders: number; leechers: number; engine: string; info: string | null; published: number | null };
+type SearchResult = { name: string; url: string; size: number; seeders: number; leechers: number; engine: string; plugin: string | null; info: string | null; published: number | null };
 
 const STATE: Record<string, [string, Tone]> = {
   downloading: ['Download', 'info'],
@@ -692,7 +692,7 @@ function SearchTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
           detail={`${pick.size > 0 ? bytes(pick.size) : 'dimensione sconosciuta'} · ${pick.seeders} seeder · ${pick.engine}`}
           categories={cats.data ?? []}
           defaultCategory={defaultCat}
-          body={{ urls: [pick.url] }}
+          body={{ urls: [pick.url], ...(pick.plugin ? { plugin: pick.plugin } : {}) }}
           onClose={() => setPick(null)}
           onDone={() => {
             setPick(null);
@@ -739,12 +739,13 @@ function AddConfirm({
         <>
           <Button variant="ghost" onClick={onClose}>Annulla</Button>
           <Button variant="primary" loading={act.isPending} onClick={() => act.mutate({ name: 'add', body: { ...body, category: cat, stopped } }, { onSuccess: onDone })}>
-            <Download /> Aggiungi
+            <Download /> {act.isPending ? 'Verifica in corso…' : 'Aggiungi'}
           </Button>
         </>
       }
     >
       <p className="mb-3 text-xs text-muted">{detail}</p>
+      <p className="mb-3 text-[11px] text-muted">GIGI OS conferma l’aggiunta solo quando il torrent compare davvero in qBittorrent (fino a 20 secondi).</p>
       <div className="space-y-3">
         <Field label="Categoria" help={cat ? `Salvato in ${categories.find((c) => c.name === cat)?.savePath ?? '—'}` : 'Senza categoria il motore media deduce il tipo dal nome.'}>
           {(id) => (

@@ -140,11 +140,28 @@ test('qbittorrent: controllo, limiti, aggiunta e ricerca con validazione', async
   const http = await import('node:http');
   const { qbittorrent } = await import('../apps/api/dist/connectors/qbittorrent.js');
   const calls = [];
+  const present = [];
+  const log = [{ id: 1, message: 'avvio' }];
   const srv = http.createServer(async (req, res) => {
     let b = '';
     for await (const c of req) b += c;
     calls.push({ url: req.url, body: b, ct: req.headers['content-type'] ?? '' });
     if (req.headers.authorization !== 'Bearer qbt_ok') return res.writeHead(403).end();
+    if (req.url.startsWith('/api/v2/torrents/info')) return res.end(JSON.stringify(present.map((h) => ({ hash: h }))));
+    if (req.url.startsWith('/api/v2/log/main')) {
+      const last = Number(new URL(req.url, 'http://x').searchParams.get('last_known_id'));
+      return res.end(JSON.stringify(log.filter((e) => e.id > last)));
+    }
+    if (req.url === '/api/v2/torrents/add') {
+      // come il vero qBittorrent: «Ok.» subito, esito reale dopo
+      if (b.includes('pagina-web')) setTimeout(() => log.push({ id: log.length + 1, message: 'Failed to add torrent. Source: "x". Reason: "expected value (list, dict, int or string) in bencoded string"' }), 300);
+      else setTimeout(() => present.push('f'.repeat(40 - String(present.length).length) + present.length), 300);
+      return res.end('Ok.');
+    }
+    if (req.url === '/api/v2/search/downloadTorrent') {
+      setTimeout(() => present.push('e'.repeat(39) + present.length), 300);
+      return res.end('');
+    }
     if (req.url === '/api/v2/search/start') return res.end(JSON.stringify({ id: 7 }));
     if (req.url.startsWith('/api/v2/search/results'))
       return res.end(JSON.stringify({ status: 'Stopped', total: 3, results: [
@@ -173,13 +190,20 @@ test('qbittorrent: controllo, limiti, aggiunta e ricerca con validazione', async
     const pj = JSON.parse(new URLSearchParams(calls.at(-1).body).get('json'));
     assert.equal(pj.max_ratio_act, 0, 'al limite si ferma, mai rimozione');
     assert.equal(pj.max_ratio, 1.5);
-    await qbittorrent.actions.add(ctx, { urls: ['magnet:?xt=urn:btih:' + H], category: 'Anime', stopped: true });
-    assert.match(calls.at(-1).ct, /multipart\/form-data/);
-    assert.match(calls.at(-1).body, /name="category"\r\n\r\nAnime/);
+    const added = await qbittorrent.actions.add(ctx, { urls: ['magnet:?xt=urn:btih:' + H], category: 'Anime', stopped: true });
+    assert.equal(added.hashes.length, 1, 'confermato solo quando compare');
+    const addCall = calls.find((c) => c.url === '/api/v2/torrents/add');
+    assert.match(addCall.ct, /multipart\/form-data/);
+    assert.match(addCall.body, /name="category"\r\n\r\nAnime/);
+    await assert.rejects(qbittorrent.actions.add(ctx, { urls: ['https://sito.example/pagina-web.html'] }), /pagina web/, 'errore asincrono riportato');
+    const viaPlugin = await qbittorrent.actions.add(ctx, { urls: ['https://sito.example/dettaglio.html'], plugin: 'limetorrents', category: 'Film' });
+    assert.equal(viaPlugin.hashes.length, 1);
+    assert.ok(calls.some((c) => c.url === '/api/v2/search/downloadTorrent' && new URLSearchParams(c.body).get('pluginName') === 'limetorrents'));
+    assert.equal(new URLSearchParams(calls.findLast((c) => c.url === '/api/v2/torrents/setCategory').body).get('category'), 'Film');
     await assert.rejects(qbittorrent.actions.add(ctx, { urls: ['javascript:alert(1)'] }), /magnet o http/);
     await assert.rejects(qbittorrent.actions.add(ctx, { torrentBase64: Buffer.from('non un torrent').toString('base64') }), /non sembra/);
     await qbittorrent.actions.add(ctx, { torrentBase64: Buffer.from('d8:announce0:e').toString('base64'), fileName: '../evil.torrent' });
-    assert.match(calls.at(-1).body, /filename="\.\._evil\.torrent"/);
+    assert.match(calls.findLast((c) => c.url === '/api/v2/torrents/add').body, /filename="\.\._evil\.torrent"/);
     const s = await qbittorrent.actions.searchStart(ctx, { pattern: 'big buck bunny', category: 'movies' });
     assert.equal(s.id, 7);
     const r = await qbittorrent.actions.searchResults(ctx, { id: 7 });

@@ -42,6 +42,24 @@ USER node
 LABEL org.opencontainers.image.title="GIGI OS" org.opencontainers.image.version="0.2.0"
 CMD ["node", "apps/api/dist/index.js"]
 
+# Agent: Debian trixie per avere journalctl compatibile con il journal dell'host (systemd ≥ 257).
+# Dipendenze di produzione installate qui (glibc), non riusate dallo stage Alpine.
+FROM node:22-trixie-slim AS agent
+RUN apt-get update && apt-get install -y --no-install-recommends systemd && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production NODE_NO_WARNINGS=1
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/agent/package.json apps/agent/
+COPY apps/api/package.json apps/api/
+COPY apps/media/package.json apps/media/
+COPY apps/files/package.json apps/files/
+COPY apps/web/package.json apps/web/
+RUN npm ci --omit=dev --no-audit --no-fund -w apps/agent --include-workspace-root=false && npm cache clean --force
+COPY --from=build /src/apps/agent/dist apps/agent/dist
+RUN mkdir -p /run/gigi && chown node:node /run/gigi && chmod 750 /run/gigi
+USER node
+CMD ["node", "apps/agent/dist/index.js"]
+
 # Worker media: aggiunge solo ffprobe (pacchetto ffmpeg di Alpine).
 FROM runtime AS media
 USER root

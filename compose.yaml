@@ -17,12 +17,13 @@ x-hardening: &hardening
 services:
   agent:
     <<: *hardening
-    build: { context: ., target: runtime }
+    image: gigi-os-agent:${GIGI_VERSION:-0.2.0}
+    build: { context: ., target: agent }
     container_name: gigi-agent
     command: ["node", "apps/agent/dist/index.js"]
     # Rete host SOLO per leggere i contatori delle interfacce dell'host: l'agent non apre alcuna porta.
     network_mode: host
-    group_add: ["${DOCKER_GID:-128}"]
+    group_add: ["${DOCKER_GID:-128}", "${JOURNAL_GID:-999}"]
     mem_limit: 160m
     cpus: 0.5
     environment:
@@ -38,11 +39,17 @@ services:
       - gigi-run:/run/gigi
       - /etc/os-release:/host/os-release:ro
       - /etc/hostname:/host/hostname:ro
-      # D-Bus di sistema: solo lettura dello stato dei servizi (start/stop negati da polkit per l'utente 1000)
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      # Stato dei servizi systemd in sola lettura, senza D-Bus (D-021): cgroup, file delle unità, journal
+      - /sys/fs/cgroup:/host/cgroup:ro
+      - /etc/systemd/system:/host/units/etc:ro
+      - /run/systemd/generator:/host/units/run:ro
+      - /usr/lib/systemd/system:/host/units/lib:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
 
   api:
     <<: *hardening
+    build: { context: ., target: runtime }
     container_name: gigi-api
     command: ["node", "apps/api/dist/index.js"]
     # Rete host: i servizi da monitorare ascoltano anche su 127.0.0.1 (Navidrome, Jellyfin, Home Assistant).
