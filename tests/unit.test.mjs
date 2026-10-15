@@ -69,3 +69,29 @@ test('redazione: righe di log e argomenti', () => {
   assert.ok(redactLine('Creating new access token for user 348eb8d0').includes('348eb8d0'));
   assert.deepEqual(redactArgs(['--password', 'x', '--port', '80', '--token=abc']), ['--password', REDACTED, '--port', '80', `--token=${REDACTED}`]);
 });
+
+test('qbittorrent: autenticazione con API key Bearer (≥ 5.2)', async () => {
+  const http = await import('node:http');
+  const { qbittorrent } = await import('../apps/api/dist/connectors/qbittorrent.js');
+  const srv = http.createServer((req, res) => {
+    if (req.headers.authorization !== 'Bearer qbt_giusta') return res.writeHead(403).end('Forbidden');
+    if (req.url === '/api/v2/app/version') return res.end('v5.2.4');
+    if (req.url.startsWith('/api/v2/torrents/info'))
+      return res.end(JSON.stringify([{ hash: 'h', name: 'x', state: 'uploading', progress: 1, size: 1, dlspeed: 0, upspeed: 0, eta: 0, category: 'Anime', save_path: '/d', content_path: '/d/x', added_on: 1, completion_on: 2, ratio: 1, num_seeds: 0, num_leechs: 0, amount_left: 0 }]));
+    res.writeHead(404).end();
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const bl = buildBlockList(['127.0.0.0/8']);
+  const ctx = (key) => ({ id: 't', baseUrl: base, auth: 'apikey', secret: { apiKey: key }, config: {}, http: (p, i) => safeFetch(bl, base + p, i) });
+  try {
+    const ok = await qbittorrent.test(ctx('qbt_giusta'));
+    assert.equal(ok.status, 'online');
+    assert.equal(ok.version, 'v5.2.4');
+    const list = await qbittorrent.resources.torrents(ctx('qbt_giusta'), new URLSearchParams());
+    assert.equal(list[0].complete, true);
+    await assert.rejects(qbittorrent.test(ctx('qbt_sbagliata')), (e) => e.status === 'unauthorized');
+  } finally {
+    srv.close();
+  }
+});

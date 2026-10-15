@@ -23,6 +23,12 @@ async function login(ctx: ConnectorContext): Promise<string> {
 }
 
 async function call(ctx: ConnectorContext, path: string, what: string) {
+  // qBittorrent ≥ 5.2: API key come Bearer, nessuna sessione da mantenere.
+  if (ctx.auth === 'apikey') {
+    const r = await ctx.http(path, { headers: { Authorization: `Bearer ${ctx.secret.apiKey}` } });
+    if (r.status === 401 || r.status === 403) throw new ConnectorError(`${what}: API key rifiutata`, 'unauthorized');
+    return expectOk(r, what);
+  }
   for (let attempt = 0; attempt < 2; attempt++) {
     const cached = sids.get(ctx.id);
     const sid = cached && Date.now() - cached.t < SID_TTL ? cached.sid : await login(ctx);
@@ -69,6 +75,11 @@ export const qbittorrent: ConnectorDef = {
   defaultContainer: 'qbittorrent',
   auth: [
     {
+      id: 'apikey',
+      label: 'API key (qBittorrent ≥ 5.2)',
+      fields: [{ key: 'apiKey', label: 'API key', type: 'password', required: true, help: 'Opzioni → Web UI → API key (inizia con qbt_)' }],
+    },
+    {
       id: 'password',
       label: 'Utente e password',
       fields: [
@@ -80,6 +91,10 @@ export const qbittorrent: ConnectorDef = {
   capabilities: ['health', 'torrents', 'transfer'],
 
   async test(ctx) {
+    if (ctx.auth === 'apikey') {
+      const v = (await call(ctx, '/api/v2/app/version', 'Versione')).body.toString('utf8').trim();
+      return { status: 'online', message: 'Autenticato con API key', version: v };
+    }
     if (!ctx.secret.username) {
       const r = await ctx.http('/', {});
       return { status: r.status < 500 ? 'unconfigured' : 'offline', message: 'Raggiungibile, credenziali mancanti' };

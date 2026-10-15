@@ -35,7 +35,7 @@ Vai su **Integrazioni** e usa i pulsanti «Suggerite». Apollo, Armony e Navidro
 | Servizio | Credenziale | Dove ottenerla |
 |---|---|---|
 | Jellyfin | API key | Dashboard Jellyfin → Chiavi API → «+» (nome: GIGI OS) |
-| qBittorrent | Utente e password della Web UI | Impostazioni Web UI di qBittorrent |
+| qBittorrent | **API key** (consigliata, qBittorrent ≥ 5.2), in alternativa utente e password | Opzioni → Web UI → API key (inizia con `qbt_`) |
 | Home Assistant | Long-lived access token | Profilo → Sicurezza → Token di accesso a lunga durata |
 | Navidrome (facoltativo) | Utente Subsonic | Un utente Navidrome, meglio se non amministratore |
 
