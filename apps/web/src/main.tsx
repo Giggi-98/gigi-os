@@ -9,6 +9,8 @@ import { ToastProvider } from './components/ui';
 import { ApiError } from './lib/api';
 import { AuthProvider, useAuth } from './lib/auth';
 import { ArmonyPage } from './pages/Armony';
+import { AutomationsPage } from './pages/Automations';
+import { BackupPage } from './pages/Backup';
 import { Dashboard } from './pages/Dashboard';
 import { DockerPage } from './pages/Docker';
 import { DownloadsPage } from './pages/Downloads';
@@ -50,6 +52,10 @@ function App() {
         <Route path="media-automation" element={<MediaAutomationPage />} />
         <Route path="download" element={<DownloadsPage />} />
         <Route path="file" element={<FilesPage />} />
+        <Route path="automazioni" element={<AutomationsPage />} />
+        <Route path="backup" element={<BackupPage />} />
+        <Route path="in-arrivo/backup" element={<Navigate to="/backup" replace />} />
+        <Route path="in-arrivo/automazioni" element={<Navigate to="/automazioni" replace />} />
         <Route path="in-arrivo/file" element={<Navigate to="/file" replace />} />
         <Route path="armony" element={<ArmonyPage />} />
         <Route path="integrazioni" element={<IntegrationsPage />} />

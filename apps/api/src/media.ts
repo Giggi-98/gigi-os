@@ -61,7 +61,7 @@ export class MediaBridge {
   async scan(actor: string) {
     const creds = await this.creds();
     if (!creds.qbt) return null;
-    const r = await this.media.json<{ detected: number; analyzed: number; imported: string[]; indexed: string[]; errors: string[] }>(
+    const r = await this.media.json<{ detected: number; analyzed: number; imported: string[]; indexed: string[]; review?: string[]; errors: string[] }>(
       'POST',
       '/v1/scan',
       300_000,
@@ -70,6 +70,7 @@ export class MediaBridge {
     for (const f of r.imported) this.events.add('info', 'media', `Importato: ${f}`);
     for (const t of r.indexed) this.events.add('info', 'media', `Disponibile in Jellyfin/Apollo: ${t}`);
     if (r.detected) this.events.add('info', 'media', `${r.detected} nuovi file rilevati nei download`, null, `media:detected:${Math.floor(Date.now() / 600_000)}`);
+    for (const f of r.review ?? []) this.events.add('info', 'media', `Da rivedere: ${f}`, 'Il motore media non è abbastanza sicuro: serve una conferma', `media:review:${f}`);
     for (const e of r.errors.slice(0, 3)) this.events.add('warning', 'media', 'Problema nel motore media', e, `media:err:${e.slice(0, 60)}`);
     return r;
   }

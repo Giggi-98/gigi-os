@@ -1,8 +1,10 @@
-import { Cpu, HardDrive, Network, Thermometer } from 'lucide-react';
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Cog, Cpu, HardDrive, Lock, Network, Search, Thermometer } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { AreaChart } from '../components/Chart';
-import { Badge, Card, cx, ErrorBox, Kv, Meter, PageHeader, Select, Skeleton } from '../components/ui';
-import { bytes, duration, pct, rate } from '../lib/format';
+import { Badge, Card, cx, Dialog, Empty, ErrorBox, Input, Kv, Meter, PageHeader, Select, Skeleton, type Tone } from '../components/ui';
+import { api } from '../lib/api';
+import { ago, bytes, dateTime, duration, pct, rate } from '../lib/format';
 import { useHistory, useSystem } from '../lib/queries';
 
 export function SystemPage() {
@@ -181,12 +183,123 @@ export function SystemPage() {
               <Kv k="GPU">{d.gpu ?? 'non rilevata'}</Kv>
               <Kv k="Uptime">{duration(d.uptime)}</Kv>
             </dl>
-            <p className="mt-3 text-[11px] leading-relaxed text-muted">
-              Servizi systemd, journal, processi e aggiornamenti arriveranno con l’adapter host a operazioni consentite (fase successiva).
-            </p>
+
           </Card>
+          <ServicesCard />
         </div>
       )}
     </div>
+  );
+}
+
+type Svc = { name: string; description: string; load: string; active: string; sub: string };
+type SvcDetail = Svc & {
+  unitFileState: string;
+  fragment: string;
+  since: number | null;
+  inactiveSince: number | null;
+  mainPid: number | null;
+  memory: number | null;
+  cpuNs: number | null;
+  tasks: number | null;
+  restarts: number | null;
+  result: string | null;
+  execMainStatus: number | null;
+  user: string;
+};
+
+const svcTone = (s: Svc): Tone => (s.active === 'failed' ? 'err' : s.active === 'active' ? (s.sub === 'running' ? 'ok' : 'info') : s.active === 'activating' ? 'warn' : 'idle');
+
+function ServicesCard() {
+  const q = useQuery({ queryKey: ['systemd'], queryFn: () => api<Svc[]>('/systemd/services'), refetchInterval: 30_000 });
+  const [filter, setFilter] = useState('running');
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState<string | null>(null);
+  const rows = useMemo(() => {
+    let r = q.data ?? [];
+    if (filter === 'running') r = r.filter((x) => x.sub === 'running');
+    else if (filter === 'failed') r = r.filter((x) => x.active === 'failed');
+    else if (filter === 'loaded') r = r.filter((x) => x.load === 'loaded');
+    const t = search.trim().toLowerCase();
+    if (t) r = r.filter((x) => x.name.toLowerCase().includes(t) || x.description.toLowerCase().includes(t));
+    return r;
+  }, [q.data, filter, search]);
+  const failed = (q.data ?? []).filter((x) => x.active === 'failed');
+  return (
+    <Card
+      title="Servizi systemd"
+      icon={<Cog />}
+      className="xl:col-span-3"
+      subtitle={q.data ? `${q.data.filter((x) => x.sub === 'running').length} in esecuzione su ${q.data.length}${failed.length ? ` · ${failed.length} in errore` : ''}` : undefined}
+      bodyClassName="!px-0"
+      actions={
+        <div className="flex gap-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted" />
+            <Input className="h-8 w-44 pl-7 text-xs" placeholder="Cerca servizio…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Cerca servizio" />
+          </div>
+          <Select className="h-8 w-auto text-xs" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filtro servizi">
+            <option value="running">In esecuzione</option>
+            <option value="failed">In errore</option>
+            <option value="loaded">Caricati</option>
+            <option value="all">Tutti</option>
+          </Select>
+        </div>
+      }
+    >
+      {q.isError && <div className="px-4"><ErrorBox error={q.error} compact /></div>}
+      {!q.data && !q.isError && <div className="px-4"><Skeleton className="h-40" /></div>}
+      {q.data && rows.length === 0 && <Empty title={filter === 'failed' ? 'Nessun servizio in errore' : 'Nessun servizio'} />}
+      {q.data && rows.length > 0 && (
+        <div className="max-h-[420px] overflow-auto">
+          <table className="w-full min-w-[560px] text-left text-[13px]">
+            <thead className="sticky top-0 border-b border-line bg-surface text-xs text-muted">
+              <tr><th className="px-4 py-2 font-medium">Servizio</th><th className="px-3 py-2 font-medium">Descrizione</th><th className="px-4 py-2 font-medium">Stato</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.name} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-surface-2" onClick={() => setOpen(s.name)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setOpen(s.name)}>
+                  <td className="px-4 py-1.5 font-mono text-xs">{s.name.replace(/\.service$/, '')}</td>
+                  <td className="max-w-[380px] truncate px-3 py-1.5 text-xs text-fg-2">{s.description}</td>
+                  <td className="px-4 py-1.5"><Badge tone={svcTone(s)}>{s.active === s.sub ? s.active : `${s.active} · ${s.sub}`}</Badge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-3 flex items-start gap-1.5 px-4 text-[11px] text-muted">
+        <Lock className="mt-px size-3 shrink-0" /> Sola lettura: l’agent non ha privilegi sui servizi dell’host. Avvio e riavvio richiedono una regola polkit dedicata (da autorizzare).
+      </p>
+      {open && <ServiceDialog name={open} onClose={() => setOpen(null)} />}
+    </Card>
+  );
+}
+
+function ServiceDialog({ name, onClose }: { name: string; onClose: () => void }) {
+  const d = useQuery({ queryKey: ['systemd', name], queryFn: () => api<SvcDetail>(`/systemd/services/${encodeURIComponent(name)}`) });
+  const s = d.data;
+  return (
+    <Dialog open onClose={onClose} title={name} description={s?.description}>
+      {d.isError && <ErrorBox error={d.error} compact />}
+      {!s && !d.isError && <Skeleton className="h-40" />}
+      {s && (
+        <dl>
+          <Kv k="Stato"><Badge tone={svcTone(s)}>{s.active} · {s.sub}</Badge></Kv>
+          {s.active === 'active' && s.since && <Kv k="Attivo da">{dateTime(s.since)} ({ago(s.since)})</Kv>}
+          {s.active !== 'active' && s.inactiveSince && <Kv k="Fermo da">{dateTime(s.inactiveSince)}</Kv>}
+          {s.result && s.result !== 'success' && <Kv k="Esito ultimo avvio"><span className="text-err">{s.result} (codice {s.execMainStatus})</span></Kv>}
+          <Kv k="Avvio automatico">{s.unitFileState || '—'}</Kv>
+          <Kv k="Utente">{s.user}</Kv>
+          <Kv k="PID">{s.mainPid || '—'}</Kv>
+          <Kv k="Memoria">{s.memory !== null ? bytes(s.memory) : '—'}</Kv>
+          <Kv k="CPU totale">{s.cpuNs !== null ? `${(s.cpuNs / 1e9).toFixed(1)} s` : '—'}</Kv>
+          <Kv k="Task">{s.tasks ?? '—'}</Kv>
+          <Kv k="Riavvii automatici">{s.restarts ?? '—'}</Kv>
+          <Kv k="File unità" mono>{s.fragment || '—'}</Kv>
+        </dl>
+      )}
+      {s?.active === 'failed' && <p className="mt-3 text-xs text-muted">Per il dettaglio dell’errore: <span className="font-mono">journalctl -u {name} -n 30</span></p>}
+    </Dialog>
   );
 }

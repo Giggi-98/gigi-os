@@ -50,15 +50,10 @@ const NAV: { group: string; items: Item[] }[] = [
   {
     group: 'Configurazione',
     items: [
+      { to: '/automazioni', label: 'Automazioni', icon: <Workflow /> },
       { to: '/integrazioni', label: 'Integrazioni', icon: <PlugZap /> },
       { to: '/sicurezza', label: 'Sicurezza', icon: <ShieldCheck /> },
-    ],
-  },
-  {
-    group: 'In arrivo',
-    items: [
-      { to: '/in-arrivo/automazioni', label: 'Automazioni', icon: <Workflow />, soon: true },
-      { to: '/in-arrivo/backup', label: 'Backup', icon: <DatabaseBackup />, soon: true },
+      { to: '/backup', label: 'Backup', icon: <DatabaseBackup /> },
     ],
   },
 ];

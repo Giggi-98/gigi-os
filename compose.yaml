@@ -38,6 +38,8 @@ services:
       - gigi-run:/run/gigi
       - /etc/os-release:/host/os-release:ro
       - /etc/hostname:/host/hostname:ro
+      # D-Bus di sistema: solo lettura dello stato dei servizi (start/stop negati da polkit per l'utente 1000)
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
 
   api:
     <<: *hardening
@@ -62,9 +64,14 @@ services:
       GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-127.0.0.0/8,::1/128,192.168.222.0/24}
       GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
       GIGI_MEDIA_SCAN_MS: ${GIGI_MEDIA_SCAN_MS:-120000}
+      GIGI_BACKUP_DIR: /backups
+      GIGI_BACKUP_EXTRA: env=/backup-src/.env,compose.yaml=/backup-src/compose.yaml
     volumes:
       - ./data:/data
       - ./secrets:/secrets:ro
+      - ./backups:/backups
+      - ./.env:/backup-src/.env:ro
+      - ./compose.yaml:/backup-src/compose.yaml:ro
       - gigi-run:/run/gigi
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('https://'+process.env.GIGI_BIND+':'+process.env.GIGI_PORT+'/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

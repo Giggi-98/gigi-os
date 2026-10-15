@@ -12,6 +12,8 @@ import type { DB } from './db.js';
 import type { Events } from './events.js';
 import type { Integrations } from './integrations.js';
 import type { MediaBridge } from './media.js';
+import type { Automations } from './automations.js';
+import type { Backups } from './backup.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -33,6 +35,8 @@ export type Deps = {
   https?: { cert: Buffer; key: Buffer } | null;
   media?: MediaBridge;
   filesSocket?: string;
+  automations?: Automations;
+  backups?: Backups;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

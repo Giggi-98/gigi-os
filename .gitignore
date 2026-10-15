@@ -11,3 +11,4 @@ data/*
 *.db
 backup*/
 screenshots/
+backups/

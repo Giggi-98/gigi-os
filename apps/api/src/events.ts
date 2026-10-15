@@ -7,6 +7,9 @@ import type { DB } from './db.js';
 export type Level = 'info' | 'warning' | 'error';
 
 export class Events {
+  /** Agganciato dalle automazioni: riceve ogni evento effettivamente registrato (dopo la deduplicazione). */
+  onAdd: ((e: { level: Level; source: string; title: string; details?: string | null }) => void) | null = null;
+
   constructor(private db: DB, private dedupWindowMs = 30 * 60_000) {}
 
   add(level: Level, source: string, title: string, details?: string | null, dedup?: string) {
@@ -17,6 +20,9 @@ export class Events {
     this.db
       .prepare('INSERT INTO events (ts, level, source, title, details, dedup) VALUES (?,?,?,?,?,?)')
       .run(Date.now(), level, source, title, details ?? null, dedup ?? null);
+    try {
+      this.onAdd?.({ level, source, title, details });
+    } catch {}
   }
 
   list(limit = 50, level?: Level) {

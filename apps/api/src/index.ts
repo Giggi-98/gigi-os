@@ -8,6 +8,9 @@ import { openDb } from './db.js';
 import { Events, followDockerEvents } from './events.js';
 import { Integrations } from './integrations.js';
 import { MediaBridge } from './media.js';
+import { Automations, watchDownloads } from './automations.js';
+import { Backups } from './backup.js';
+import { getSetting, setSetting } from './db.js';
 import { Audit, LoginLimiter, Sessions } from './security.js';
 import { buildBlockList } from './ssrf.js';
 import { Vault } from './vault.js';
@@ -24,6 +27,11 @@ async function main() {
   const sessions = new Sessions(db, config.sessionIdleHours * 3600_000, config.sessionMaxDays * 86400_000);
   const limiter = new LoginLimiter(db);
   const audit = new Audit(db);
+  const automations = new Automations(db, vault, integrations, buildBlockList(config.allowedTargets), buildBlockList, (m, e) => log('warn', m, e ?? {}));
+  automations.seedRules();
+  events.onAdd = (e) => automations.onEvent(e);
+  const backups = new Backups(db, config.dataDir, config.backupDir, config.backupExtra, config.masterKeyFile, events);
+  backups.schedule((m, e) => log('warn', m, e ?? {}));
   const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events);
 
   // Codice di setup monouso: serve solo finché non esiste alcun utente.
@@ -56,6 +64,8 @@ async function main() {
     https: tls,
     media,
     filesSocket: config.filesSocket,
+    automations,
+    backups,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));
@@ -69,10 +79,23 @@ async function main() {
         if (used > 0.9) events.add(used > 0.95 ? 'error' : 'warning', 'sistema', `Disco «${dk.label}» al ${Math.round(used * 100)}%`, null, `disk:${dk.label}`);
       }
     } catch {}
+    try {
+      const svc = await agent.json<{ name: string; active: string }[]>('GET', '/v1/systemd/services');
+      for (const u of svc.filter((x) => x.active === 'failed')) {
+        events.add('warning', 'sistema', `Servizio ${u.name} in errore`, 'Dettagli nella pagina Sistema → Servizi', `systemd:${u.name}:${new Date().toISOString().slice(0, 10)}`);
+      }
+    } catch {}
   };
   setInterval(() => void integrations.checkAll(), config.healthIntervalMs).unref();
   setInterval(() => void media.scan('pianificazione').catch((e) => log('warn', 'scansione media non riuscita', { err: (e as Error).message })), config.mediaScanMs).unref();
   setInterval(() => void disks(), 5 * 60_000).unref();
+  const downloads = watchDownloads(
+    integrations,
+    events,
+    () => JSON.parse(getSetting(db, 'downloads.seen') ?? '[]') as string[],
+    (h) => setSetting(db, 'downloads.seen', JSON.stringify(h)),
+  );
+  setInterval(() => void downloads().catch(() => undefined), 60_000).unref();
   setInterval(() => {
     sessions.purge();
     limiter.purge();

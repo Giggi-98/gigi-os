@@ -61,7 +61,7 @@ const MIN_VIDEO_BYTES = 50 * 1024 * 1024;
 /** Incrementare quando cambia la logica di analisi: gli elementi non importati vengono rianalizzati. */
 export const ENGINE_VERSION = '2';
 
-export type ScanReport = { detected: number; analyzed: number; imported: string[]; indexed: string[]; errors: string[] };
+export type ScanReport = { detected: number; analyzed: number; imported: string[]; indexed: string[]; review: string[]; errors: string[] };
 
 export class Engine {
   db: DatabaseSync;
@@ -231,14 +231,18 @@ export class Engine {
 
   // ───────── ciclo principale ─────────
   async scan(creds: Creds, actor = 'sistema'): Promise<ScanReport> {
-    if (this.busy) return { detected: 0, analyzed: 0, imported: [], indexed: [], errors: ['scansione già in corso'] };
+    if (this.busy) return { detected: 0, analyzed: 0, imported: [], indexed: [], review: [], errors: ['scansione già in corso'] };
     this.busy = true;
-    const report: ScanReport = { detected: 0, analyzed: 0, imported: [], indexed: [], errors: [] };
+    const report: ScanReport = { detected: 0, analyzed: 0, imported: [], indexed: [], review: [], errors: [] };
     try {
       if (creds.qbt) await this.detect(creds, report);
       for (const r of this.db.prepare("SELECT * FROM media_items WHERE status = 'waiting'").all() as Row[]) {
         try {
-          if (await this.analyze(r, creds)) report.analyzed++;
+          if (await this.analyze(r, creds)) {
+            report.analyzed++;
+            const now = this.db.prepare('SELECT status FROM media_items WHERE id = ?').get(r.id) as { status: string } | undefined;
+            if (now && ['review', 'conflict'].includes(now.status)) report.review.push(path.basename(r.rel_path));
+          }
         } catch (e) {
           report.errors.push(`${path.basename(r.rel_path)}: ${(e as Error).message}`);
         }

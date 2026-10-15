@@ -19,7 +19,7 @@ GIGI OS gira in un proprio stack Docker (`gigi-os`). Le altre applicazioni (Jell
 | Sezione | Cosa fa | Note |
 |---|---|---|
 | Dashboard | CPU, RAM, disco, rete, temperatura, uptime, salute dei container, stato delle app, ultimi contenuti Jellyfin, download, eventi recenti | Widget trascinabili e ridimensionabili (pulsante «Personalizza»); il layout viene salvato per utente |
-| Sistema | Storico di CPU, RAM e rete (ultima ora), utilizzo per core, temperature, dischi, interfacce | Dati letti da /proc e /sys, nessun dato simulato |
+| Sistema | Storico di CPU, RAM e rete (ultima ora), utilizzo per core, temperature, dischi, interfacce; servizi systemd (stato, memoria, avvio, riavvii) | Dati letti da /proc e /sys. I servizi systemd sono in sola lettura via D-Bus e oggi risultano **bloccati da AppArmor** (vedi D-020) |
 | Docker | Container (ricerca, filtri, ordinamento), dettaglio, healthcheck, mount, rete, variabili d'ambiente oscurate, log in diretta, immagini, volumi, reti | Avvio/stop/riavvio solo per gli admin, con conferma digitando il nome; `gigi-agent` e `gigi-api` sono protetti |
 | Media | Jellyfin (librerie, conteggi, scansioni, sessioni, ultimi aggiunti), Apollo (stato), qBittorrent (torrent, velocità, categorie) | Richiede le credenziali di Jellyfin e qBittorrent (vedi sotto) |
 | File | File manager su `/srv/downloads` e `/srv/media`: navigazione, ricerca, anteprima (immagini, video, audio, testo), caricamento e scaricamento, nuova cartella, rinomina, sposta / copia / hardlink tra cartelle, permessi e proprietario, hardlink in libreria evidenziati | Solo admin, ogni modifica in audit. «Elimina» sposta nel **cestino** (ripristinabile); l’unica cancellazione definitiva è «Svuota cestino» con conferma «SVUOTA». Mai sovrascritture. Worker `gigi-files` senza rete |
@@ -27,9 +27,11 @@ GIGI OS gira in un proprio stack Docker (`gigi-os`). Le altre applicazioni (Jell
 | Media automation | Download completati → riconoscimento (nome, ffprobe, metadati TMDb tramite Jellyfin) → proposta con confidenza e motivazioni → import con **hardlink** → notifica e verifica in Jellyfin (e quindi Apollo) | Import automatico **spento** di default; sotto l’85% serve conferma; correzione manuale; duplicati e conflitti bloccati |
 | Armony | Dispositivi e brano in riproduzione con comandi (play/pausa/avanti/indietro/volume), stato del server Armony, certificato del dominio, registro eventi, Navidrome, stack `armony` | Richiede la chiave API Armony (`arm_…`); comandi e registro solo per gli admin |
 | Integrazioni | Aggiunta, verifica, modifica e rimozione dei connettori; credenziali cifrate | Jellyfin, qBittorrent, Navidrome, Home Assistant, Armony, Apollo, HTTP generico |
+| Automazioni | Regole sugli eventi (Docker, sistema, integrazioni, media, download, backup) con livello minimo, filtro testo, antiripetizione e ore di silenzio; canali Home Assistant, ntfy, Telegram e webhook con prova di invio; storico notifiche; registro eventi | 7 regole suggerite create **disattivate**. Segreti dei canali cifrati. Nuovi eventi: download completato, media da rivedere, servizio systemd in errore |
+| Backup | Backup giornaliero (03:30, 14 copie) di database GIGI OS e motore media (`VACUUM INTO` + `integrity_check`), `.env` e `compose.yaml`; esecuzione manuale, download, eliminazione, guida al ripristino | La chiave master è esclusa salvo opzione esplicita. I backup sono in `/opt/gigi-os/backups` (stesso disco: scaricane copie altrove) |
 | Sicurezza | Cambio password, sessioni attive, utenti e ruoli, audit log, modello di sicurezza | Ruoli: amministratore e sola lettura |
 
-**Non ancora disponibili** (in barra laterale come «presto», senza alcuna operazione attiva): file manager, automazioni, backup, gestione di systemd e journal.
+**Non ancora disponibili:** controllo (avvio/riavvio) dei servizi systemd e lettura del journal; backup delle configurazioni degli altri servizi; editor visuale delle automazioni.
 
 ## Media automation: come funziona
 

@@ -17,9 +17,10 @@ import {
   startStatsLoop,
 } from './docker.js';
 import { getHistory, getSnapshot, startSampler } from './system.js';
+import { listServices, markDbusFailure, serviceDetail } from './systemd.js';
 
 const SOCKET = process.env.GIGI_AGENT_SOCKET ?? '/run/gigi/agent.sock';
-const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
+const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.@:-]{0,199}$/;
 
 const log = (level: string, msg: string, extra: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), level, msg, ...extra }));
@@ -39,6 +40,8 @@ const routes: [string, RegExp, Handler][] = [
     /^\/v1\/system\/history$/,
     async (_q, res, _p, q) => send(res, 200, getHistory(q.get('since') ? Number(q.get('since')) : undefined)),
   ],
+  ['GET', /^\/v1\/systemd\/services$/, async (_q, res) => send(res, 200, await listServices())],
+  ['GET', /^\/v1\/systemd\/services\/([^/]+)$/, async (_q, res, p) => send(res, 200, await serviceDetail(p[0]))],
   ['GET', /^\/v1\/docker\/info$/, async (_q, res) => send(res, 200, await engineInfo())],
   ['GET', /^\/v1\/containers$/, async (_q, res) => send(res, 200, await listContainers())],
   ['GET', /^\/v1\/containers\/([^/]+)$/, async (_q, res, p) => send(res, 200, await inspectContainer(p[0]))],
@@ -112,6 +115,17 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   send(res, 404, { error: 'route sconosciuta' });
+});
+
+// dbus-next rilancia l'errore di connessione in una promise non gestita: non deve mai far cadere l'agent.
+// Qualsiasi altra promise non gestita mantiene il comportamento predefinito (arresto), per non nascondere bug.
+process.on('unhandledRejection', (reason) => {
+  if (/DBusError|dbus/i.test(String((reason as Error)?.stack ?? reason))) {
+    markDbusFailure(reason);
+    log('warn', 'systemd non disponibile', { err: String((reason as Error)?.message ?? reason).slice(0, 200) });
+    return;
+  }
+  throw reason;
 });
 
 async function main() {

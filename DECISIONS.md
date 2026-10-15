@@ -112,3 +112,21 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Perché separato da gigi-media.** Il motore media conserva la garanzia di non eliminare mai nulla (D-011). Un bug del file manager non può toccare la logica di import, e viceversa.
 **Download dei file.** Il download e l’anteprima inline sono serviti con `Content-Security-Policy: sandbox` e `nosniff`; inline solo immagini, video, audio e PDF, tutto il resto come allegato.
 **Da rivedere se** servono altre radici (es. `/home/gigi/armony/musica`): basta aggiungerle a `GIGI_FILES_ROOTS` e al mount.
+
+## D-018 — Automazioni come regole su eventi, notifiche su canali esterni (2026-10-16)
+
+**Scelta.** Ogni evento registrato (`events`) viene valutato dalle regole attive: sorgente, livello minimo, filtro testo, antiripetizione per titolo, ore di silenzio (gli errori passano comunque). Canali: servizio `notify.*` di Home Assistant (tramite l’integrazione già configurata), ntfy (pubblicazione JSON, UTF-8), Telegram e webhook. Le destinazioni pubbliche sono ammesse; quelle private solo se dentro le reti LAN autorizzate. I token sono cifrati nel vault (AAD `channel:<id>`) e non compaiono nei messaggi di errore. Le regole suggerite nascono disattivate.
+**Alternative scartate.** Un editor a nodi stile Node-RED: per la V4 basta un modello evento→condizioni→notifica, e l’editor visuale resta una fase successiva. Un servizio esterno (Apprise, Gotify): sarebbe un container in più per quattro canali.
+**Da rivedere se** servono azioni diverse dalla notifica (es. riavvio automatico di un container): richiedono conferme e limiti dedicati.
+
+## D-019 — Backup interno di GIGI OS (2026-10-16)
+
+**Scelta.** Snapshot dei database con `VACUUM INTO` (coerente durante l’esecuzione), `PRAGMA integrity_check` sulla copia, archivio `.tar.gz` scritto in casa (ustar minimale, nessuna dipendenza), retention configurabile, evento `backup` sia in caso di riuscita sia di errore. Nessun ripristino con un clic: la procedura è guidata e manuale.
+**Esclusioni.** La chiave master è esclusa salvo opzione esplicita, perché un backup che la contiene equivale alle credenziali in chiaro. I dati degli altri servizi non sono inclusi: le loro configurazioni contengono segreti propri (es. `secrets.yaml` di Home Assistant) e richiederebbero mount aggiuntivi.
+**Da rivedere se** si aggiunge un disco esterno o una destinazione remota (rsync/S3): il backup su un solo disco protegge da errori ed eventuali corruzioni, non da un guasto del disco.
+
+## D-020 — systemd in sola lettura via D-Bus; bloccato da AppArmor (2026-10-16)
+
+**Contesto.** Da utente non privilegiato, D-Bus consente di leggere unità e proprietà di systemd (verificato sull’host con l’utente 1000: 190 servizi letti, `RestartUnit` negato con `InteractiveAuthorizationRequired`). Dentro il container, però, il profilo AppArmor `docker-default` blocca anche la connessione al bus (`Hello`).
+**Scelta attuale.** L’agent gestisce l’errore (prima mandava in crash il processo: corretto, dopo il fix 0 riavvii) e l’interfaccia mostra la causa. Nessuna modifica di sicurezza applicata senza consenso.
+**Opzioni da autorizzare.** (a) `security_opt: apparmor=unconfined` solo per `gigi-agent`: l’agent ha già `docker.sock`, quindi è già equivalente a root, e l’aumento di privilegi è minimo. (b) Un profilo AppArmor dedicato che consenta solo D-Bus verso `org.freedesktop.systemd1`: richiede di caricare un profilo sull’host. Avvio/riavvio richiederebbero inoltre una regola polkit limitata a servizi in allowlist.

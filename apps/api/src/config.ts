@@ -15,6 +15,8 @@ export const config = {
   agentSocket: env.GIGI_AGENT_SOCKET ?? '/run/gigi/agent.sock',
   mediaSocket: env.GIGI_MEDIA_SOCKET ?? '/run/gigi/media.sock',
   filesSocket: env.GIGI_FILES_SOCKET ?? '/run/gigi/files.sock',
+  backupDir: env.GIGI_BACKUP_DIR ?? path.resolve('backups'),
+  backupExtra: list(env.GIGI_BACKUP_EXTRA, '').map((s) => { const [label, file] = s.split('='); return { label, file }; }).filter((x) => x.label && x.file),
   mediaScanMs: Number(env.GIGI_MEDIA_SCAN_MS ?? 120_000),
   masterKeyFile: env.GIGI_MASTER_KEY_FILE ?? path.resolve('secrets/master.key'),
   tlsCert: env.GIGI_TLS_CERT ?? '',

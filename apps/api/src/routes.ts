@@ -7,6 +7,8 @@ import { jellyfinImage } from './connectors/jellyfin.js';
 import { ConnectorError } from './connectors/types.js';
 import { integrationInput } from './integrations.js';
 import { registerFiles } from './files.js';
+import { registerAutomations } from './automations.js';
+import { registerBackups } from './backup.js';
 import { COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
@@ -251,6 +253,12 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   app.get('/api/v1/system/history', viewer, async (req) => {
     const minutes = Math.min(Number((req.query as { minutes?: string }).minutes ?? 60) || 60, 60);
     return agent.json('GET', `/v1/system/history?since=${Date.now() - minutes * 60_000}`);
+  });
+  app.get('/api/v1/systemd/services', viewer, async () => agent.json('GET', '/v1/systemd/services'));
+  app.get('/api/v1/systemd/services/:name', viewer, async (req, reply) => {
+    const { name } = req.params as { name: string };
+    if (!/^[a-zA-Z0-9@._:-]{1,200}\.service$/.test(name)) return reply.code(400).send({ error: 'nome non valido' });
+    return agent.json('GET', `/v1/systemd/services/${encodeURIComponent(name)}`);
   });
   app.get('/api/v1/docker/info', viewer, async () => agent.json('GET', '/v1/docker/info'));
   app.get('/api/v1/docker/containers', viewer, async () => agent.json('GET', '/v1/containers'));
@@ -505,6 +513,8 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
 
   d.media?.register(app, audit, viewer, admin);
   if (d.filesSocket) registerFiles(app, d.filesSocket, audit, admin);
+  if (d.automations) registerAutomations(app, d.automations, events, audit, viewer, admin);
+  if (d.backups) registerBackups(app, d.backups, audit, admin);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }

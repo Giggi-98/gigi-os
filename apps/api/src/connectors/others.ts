@@ -99,6 +99,12 @@ export const homeassistant: ConnectorDef = {
         domains,
       };
     },
+    /** Servizi notify.* disponibili (es. notify.mobile_app_telefono) per il canale di notifica. */
+    async notify(ctx) {
+      const r = await ctx.http('/api/services', { headers: { Authorization: `Bearer ${ctx.secret.token}` }, maxBytes: 10 * 1024 * 1024 });
+      const all = json<{ domain: string; services: Record<string, unknown> }[]>(expectOk(r, 'Servizi'));
+      return (all.find((d) => d.domain === 'notify')?.services ? Object.keys(all.find((d) => d.domain === 'notify')!.services) : []).map((s) => `notify.${s}`);
+    },
   },
 };
 
