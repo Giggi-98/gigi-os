@@ -96,8 +96,9 @@ export const jellyfin = {
       c,
       `/Items?Recursive=true&IncludeItemTypes=${type}&Fields=Path,ProviderIds,ProductionYear&searchTerm=${encodeURIComponent(term)}&Limit=20`,
     ).then((r) => r.Items),
+  // CollapseBoxSetItems=false: senza, i film che appartengono a una collezione vengono sostituiti dal boxset
   recentByPath: (c: NonNullable<Creds['jf']>) =>
-    jf<{ Items: JfItem[] }>(c, '/Items?Recursive=true&IncludeItemTypes=Movie,Episode&Fields=Path&SortBy=DateCreated&SortOrder=Descending&Limit=300').then(
+    jf<{ Items: JfItem[] }>(c, '/Items?Recursive=true&IncludeItemTypes=Movie,Episode&Fields=Path&CollapseBoxSetItems=false&SortBy=DateCreated&SortOrder=Descending&Limit=300').then(
       (r) => r.Items,
     ),
   /** Notifica mirata di nuovi file (stessa API usata da Sonarr/Radarr). */

@@ -95,7 +95,11 @@ const jfSrv = await server((req, res, body) => {
     return res.end(JSON.stringify({ Items: [] }));
   }
   if (u.pathname === '/Items' && u.searchParams.get('IncludeItemTypes') === 'Movie') return res.end(JSON.stringify({ Items: [] }));
-  if (u.pathname === '/Items') return res.end(JSON.stringify({ Items: [...jfIndexed.values()] }));
+  if (u.pathname === '/Items') {
+    // come Jellyfin reale: senza CollapseBoxSetItems=false i film in una collezione diventano il boxset
+    if (u.searchParams.get('CollapseBoxSetItems') !== 'false') return res.end(JSON.stringify({ Items: [{ Id: 'bx', Name: 'Collezione', Type: 'BoxSet', Path: '/config/data/collections/X [boxset]' }] }));
+    return res.end(JSON.stringify({ Items: [...jfIndexed.values()] }));
+  }
   if (u.pathname === '/Library/Media/Updated') {
     notified.push(...body.Updates.map((x) => x.Path));
     return res.writeHead(204).end();
