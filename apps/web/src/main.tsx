@@ -14,6 +14,7 @@ import { DockerPage } from './pages/Docker';
 import { IntegrationsPage } from './pages/Integrations';
 import { Login } from './pages/Login';
 import { MediaPage } from './pages/Media';
+import { MediaAutomationPage } from './pages/MediaAutomation';
 import { SecurityPage } from './pages/Security';
 import { SystemPage } from './pages/System';
 import { UpcomingPage } from './pages/Upcoming';
@@ -44,9 +45,11 @@ function App() {
         <Route path="sistema" element={<SystemPage />} />
         <Route path="docker" element={<DockerPage />} />
         <Route path="media" element={<MediaPage />} />
+        <Route path="media-automation" element={<MediaAutomationPage />} />
         <Route path="armony" element={<ArmonyPage />} />
         <Route path="integrazioni" element={<IntegrationsPage />} />
         <Route path="sicurezza" element={<SecurityPage />} />
+        <Route path="in-arrivo/media-automation" element={<Navigate to="/media-automation" replace />} />
         <Route path="in-arrivo/:id" element={<UpcomingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

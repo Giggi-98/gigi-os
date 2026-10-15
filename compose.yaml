@@ -3,7 +3,7 @@
 name: gigi-os
 
 x-hardening: &hardening
-  image: gigi-os:${GIGI_VERSION:-0.1.0}
+  image: gigi-os:${GIGI_VERSION:-0.2.0}
   restart: unless-stopped
   user: "1000:1000"
   read_only: true
@@ -17,7 +17,7 @@ x-hardening: &hardening
 services:
   agent:
     <<: *hardening
-    build: .
+    build: { context: ., target: runtime }
     container_name: gigi-agent
     command: ["node", "apps/agent/dist/index.js"]
     # Rete host SOLO per leggere i contatori delle interfacce dell'host: l'agent non apre alcuna porta.
@@ -32,7 +32,7 @@ services:
       # statfs su un file del filesystem root restituisce lo spazio di "/" senza montare directory dell'host
       GIGI_DISKS: "Sistema (/)=/host/hostname"
       GIGI_CONTROL_ALLOW: ${GIGI_CONTROL_ALLOW:-*}
-      GIGI_PROTECTED_CONTAINERS: gigi-agent,gigi-api
+      GIGI_PROTECTED_CONTAINERS: gigi-agent,gigi-api,gigi-media
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - gigi-run:/run/gigi
@@ -61,6 +61,7 @@ services:
       NODE_EXTRA_CA_CERTS: /secrets/tls.crt
       GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-127.0.0.0/8,::1/128,192.168.222.0/24}
       GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
+      GIGI_MEDIA_SCAN_MS: ${GIGI_MEDIA_SCAN_MS:-120000}
     volumes:
       - ./data:/data
       - ./secrets:/secrets:ro
@@ -71,6 +72,29 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  media:
+    <<: *hardening
+    image: gigi-os-media:${GIGI_VERSION:-0.2.0}
+    build: { context: ., target: media }
+    container_name: gigi-media
+    command: ["node", "apps/media/dist/index.js"]
+    # Rete host per raggiungere Jellyfin (127.0.0.1:8096) e qBittorrent; nessuna porta in ascolto.
+    network_mode: host
+    depends_on: [agent]
+    mem_limit: 256m
+    cpus: 1.0
+    environment:
+      GIGI_MEDIA_SOCKET: /run/gigi/media.sock
+      GIGI_DATA_DIR: /data
+      # Librerie Jellyfin esistenti (verificate il 2026-10-15): non viene creata alcuna nuova tassonomia
+      GIGI_MEDIA_LIBRARIES: movies=/srv/media/Film,series=/srv/media/SerieTV,animeMovies=/srv/media/Anime/Film,animeSeries=/srv/media/Anime/Serie
+    volumes:
+      # /srv come UNICO mount: gli hardlink tra downloads e media funzionano solo nello stesso mount.
+      # Il codice non elimina, non sposta e non sovrascrive mai file (vedi DECISIONS D-011).
+      - /srv:/srv
+      - ./data/media:/data
+      - gigi-run:/run/gigi
 
 volumes:
   gigi-run:

@@ -100,14 +100,15 @@ export function MediaPage() {
             {!qb || qb.status === 'unconfigured' ? <Setup type="qbittorrent" label="qBittorrent" /> : <Torrents qb={qb} />}
           </section>
           <Card>
-            <div className="flex items-start gap-3">
-              <Wand2 className="mt-0.5 size-5 text-muted" />
-              <div className="text-xs text-muted">
-                <div className="mb-0.5 text-[13px] font-medium text-fg-2">
-                  Media automation <Badge className="ml-1">non ancora disponibile</Badge>
-                </div>
-                Classificazione automatica dei download completati, coda di revisione e importazione con hardlink arriveranno nella V3. Per ora GIGI OS mostra i download ma non sposta né rinomina alcun file.
+            <div className="flex flex-wrap items-center gap-3">
+              <Wand2 className="size-5 text-accent" />
+              <div className="min-w-0 flex-1 text-xs text-muted">
+                <div className="text-[13px] font-medium text-fg-2">Media automation</div>
+                Riconoscimento dei download completati, coda di revisione e importazione con hardlink nelle librerie Jellyfin.
               </div>
+              <Link to="/media-automation">
+                <Button size="sm">Apri</Button>
+              </Link>
             </div>
           </Card>
         </div>

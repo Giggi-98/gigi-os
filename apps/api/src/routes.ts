@@ -347,6 +347,8 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       configFields: c.configFields ?? [],
       capabilities: c.capabilities,
       resources: Object.keys(c.resources),
+      adminResources: c.adminResources ?? [],
+      actions: Object.keys(c.actions ?? {}),
     })),
   );
   app.get('/api/v1/integrations', viewer, async () => integrations.list());
@@ -395,7 +397,24 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   app.get('/api/v1/integrations/:id/resources/:name', viewer, async (req, reply) => {
     const { id, name } = req.params as { id: string; name: string };
     if (!UUID.test(id) || !/^[a-z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
+    if (integrations.isAdminResource(id, name) && req.user?.role !== 'admin') {
+      audit.log(req, 'integration.resource', 'denied', `${id}:${name}`);
+      return reply.code(403).send({ error: 'Dati riservati agli amministratori' });
+    }
     return integrations.resource(id, name, new URLSearchParams(req.query as Record<string, string>));
+  });
+
+  app.post('/api/v1/integrations/:id/actions/:name', admin, async (req, reply) => {
+    const { id, name } = req.params as { id: string; name: string };
+    if (!UUID.test(id) || !/^[a-z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
+    try {
+      const r = await integrations.action(id, name, req.body);
+      audit.log(req, `integration.action.${name}`, 'ok', r.integration, req.body);
+      return r;
+    } catch (e) {
+      audit.log(req, `integration.action.${name}`, 'error', id, { body: req.body, err: (e as Error).message });
+      throw e;
+    }
   });
 
   app.get('/api/v1/integrations/:id/jellyfin/image/:itemId', viewer, async (req, reply) => {
@@ -469,6 +488,8 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     db.prepare('DELETE FROM layouts WHERE user_id = ?').run((req as Authed).user.id);
     return { ok: true };
   });
+
+  d.media?.register(app, audit, viewer, admin);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }

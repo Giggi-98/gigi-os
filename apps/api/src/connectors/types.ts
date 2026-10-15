@@ -45,6 +45,10 @@ export type ConnectorDef = {
   capabilities: string[];
   test(ctx: ConnectorContext): Promise<TestResult>;
   resources: Record<string, (ctx: ConnectorContext, params: URLSearchParams) => Promise<unknown>>;
+  /** risorse con dati sensibili (log, utenti, IP): solo amministratori */
+  adminResources?: string[];
+  /** azioni che modificano lo stato del servizio: solo amministratori, sempre in audit */
+  actions?: Record<string, (ctx: ConnectorContext, body: unknown) => Promise<unknown>>;
 };
 
 export class ConnectorError extends Error {

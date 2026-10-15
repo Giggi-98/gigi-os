@@ -3,18 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Badge, Card, PageHeader } from '../components/ui';
 
 const MODULES: Record<string, { title: string; phase: string; points: string[] }> = {
-  'media-automation': {
-    title: 'Media automation',
-    phase: 'V3',
-    points: [
-      'Rilevamento dei download completati e stabili in qBittorrent',
-      'Analisi con ffprobe/MediaInfo e parsing del nome file (film, serie, anime, speciali/OVA)',
-      'Matching metadati TMDb/AniList con punteggio di confidenza e motivazione',
-      'Coda di revisione per i casi ambigui; importazione automatica solo sopra soglia',
-      'Hardlink verso /srv/media per non interrompere il seeding, mai cancellazioni',
-      'Scansione mirata Jellyfin via API e verifica dell’indicizzazione',
-    ],
-  },
   file: {
     title: 'File manager',
     phase: 'V4',

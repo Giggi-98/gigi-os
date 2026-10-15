@@ -13,6 +13,7 @@ import {
   Network,
   Server,
   Siren,
+  Wand2,
   Thermometer,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -35,7 +36,8 @@ import {
   StatusBadge,
   STATUS,
 } from '../components/ui';
-import type { Integration } from '../lib/api';
+import { api, type Integration } from '../lib/api';
+import { useQuery } from '@tanstack/react-query';
 import { ago, bytes, duration, eta, pct, rate } from '../lib/format';
 import { byType, useHistory, useOverview, useResource, useSystem } from '../lib/queries';
 
@@ -413,7 +415,36 @@ function DownloadsWidget() {
   );
 }
 
+function MediaQueueWidget() {
+  const q = useQuery({ queryKey: ['media-summary'], queryFn: () => api<{ counts: Record<string, number>; settings: { autoImport: boolean; lastScan: number | null } }>('/media/summary'), refetchInterval: 30_000 });
+  if (q.isError) return <ErrorBox error={q.error} compact />;
+  if (!q.data) return <Loading />;
+  const c = q.data.counts;
+  const tiles: [string, number, string][] = [
+    ['Da rivedere', c.review ?? 0, (c.review ?? 0) ? 'text-warn' : ''],
+    ['Pronti', c.ready ?? 0, (c.ready ?? 0) ? 'text-info' : ''],
+    ['Problemi', (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0), (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0) ? 'text-err' : ''],
+    ['In libreria', c.indexed ?? 0, 'text-ok'],
+  ];
+  return (
+    <Link to="/media-automation" className="flex h-full flex-col">
+      <div className="grid grid-cols-2 gap-2">
+        {tiles.map(([l, v, cls]) => (
+          <div key={l} className="rounded-lg bg-surface-2 px-2.5 py-2">
+            <div className={cx('text-lg font-semibold tabular', cls)}>{v}</div>
+            <div className="text-[11px] text-muted">{l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-auto pt-2 text-[11px] text-muted">
+        Import automatico {q.data.settings.autoImport ? 'attivo' : 'disattivato'} · ultima scansione {ago(q.data.settings.lastScan)}
+      </div>
+    </Link>
+  );
+}
+
 export const WIDGETS: Record<string, WidgetDef> = {
+  mediaQueue: { title: 'Coda media', icon: <Wand2 />, description: 'Download da classificare e importare', size: { w: 4, h: 6, minW: 3, minH: 5 }, Component: MediaQueueWidget },
   cpu: { title: 'CPU', icon: <Cpu />, description: 'Utilizzo, temperatura e load', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: CpuWidget },
   memory: { title: 'Memoria', icon: <MemoryStick />, description: 'RAM e swap', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: MemoryWidget },
   disk: { title: 'Dischi', icon: <HardDrive />, description: 'Spazio occupato', size: { w: 3, h: 5, minW: 3, minH: 3 }, Component: DiskWidget },
@@ -437,6 +468,7 @@ export const DEFAULT_LAYOUT = [
   { i: 'apps', type: 'apps', x: 0, y: 12 },
   { i: 'containers', type: 'containers', x: 8, y: 12 },
   { i: 'jellyfin', type: 'jellyfin', x: 0, y: 18 },
+  { i: 'mediaQueue', type: 'mediaQueue', x: 8, y: 23 },
   { i: 'downloads', type: 'downloads', x: 0, y: 24 },
   { i: 'events', type: 'events', x: 6, y: 24 },
 ].map((l) => ({ ...l, w: WIDGETS[l.type].size.w, h: WIDGETS[l.type].size.h }));

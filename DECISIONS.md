@@ -64,3 +64,37 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 
 **Scelta.** Il ruolo `viewer` vede stato, metriche e liste. Log dei container, variabili d'ambiente, comandi ed etichette sono riservati agli admin, anche se già oscurati dall'agent.
 **Motivo.** L'oscuramento è euristico: i log possono contenere segreti in formati non previsti (caso reale: Jellyfin scrive «Logging out access token …», coperto dopo la verifica del 2026-10-15).
+
+## D-010 — Parser delle release scritto in casa (2026-10-16)
+
+**Contesto.** `@ctrl/video-filename-parser` (MIT, porting delle logiche di Sonarr/Radarr) restituisce titolo vuoto per `[EMBER] Ninja Kamui - 01`, S11E00 per `One Piece - 1100` e S20E24 per `Dune.Part.Two.2024`. `anitomyscript` non è più mantenuto dal 2022 e non funziona su Node 22.
+**Scelta.** Parser dedicato in `apps/media/src/parse.ts`: scene SxxEyy/1x04, fansub ` - NN`/`vN`/batch, stagione nel titolo, speciali (OVA/ONA/SP) in stagione 0, numerazione assoluta marcata come tale, film con anno. Ogni deduzione è annotata e coperta da test su nomi reali.
+**Supera** la parte di D-001 che prevedeva `@ctrl/video-filename-parser`/anitomy.
+**Da rivedere se** compaiono molti nomi che il parser non interpreta: aggiungere casi ai test, oppure introdurre `guessit` in un worker Python isolato.
+
+## D-011 — Worker media separato, hardlink-only, mai cancellazioni (2026-10-16)
+
+**Scelta.** `gigi-media` è l’unico processo con `/srv` in scrittura (un solo mount, necessario perché gli hardlink tra mount diversi falliscono con EXDEV). Importa solo con `link()`, che è atomico e fallisce se la destinazione esiste. Nessuna operazione di unlink, rename o copia. Se sorgente e libreria sono su filesystem diversi, si ferma e lo segnala.
+**Alternative scartate.** Spostamento (interrompe il seeding). Copia automatica (raddoppia lo spazio, la si fa solo su richiesta). Import nel processo API (darebbe scrittura su `/srv` al processo esposto in rete).
+**Da rivedere se** le librerie vengono spostate su un altro disco: in quel caso serve una modalità copia esplicita, con conferma e stima dello spazio.
+
+## D-012 — Metadati tramite i provider di Jellyfin (2026-10-16)
+
+**Scelta.** Matching con `POST /Items/RemoteSearch/{Series|Movie}` di Jellyfin, che usa i provider già configurati (TMDb, OMDb), più la ricerca nella libreria locale. Nessuna chiave TMDb/AniList aggiuntiva e nessuna chiamata diretta a Internet dal worker.
+**Conseguenze.** I nomi proposti coincidono con quelli che Jellyfin poi riconosce. Se Jellyfin è offline, gli elementi vanno in revisione.
+**Da rivedere se** serve una mappatura migliore della numerazione assoluta degli anime (AniDB/AniList con una mappa episodio→stagione).
+
+## D-013 — Credenziali al worker solo in memoria, per richiesta (2026-10-16)
+
+**Scelta.** L’API decifra le credenziali di qBittorrent e Jellyfin e le passa a `gigi-media` nel corpo di ogni richiesta sul socket Unix. Il worker non vede il vault né la chiave master, e non salva segreti. Le mappature dei percorsi si ricavano dai mount reali dei container `qbittorrent` e `jellyfin` (tramite l’agent), non da configurazione manuale.
+**Da rivedere se** il worker deve lavorare anche quando l’API è ferma.
+
+## D-014 — Duplicati per inode su tutte le librerie (2026-10-16)
+
+**Contesto.** Durante la prima analisi reale, «Chainsaw Man – The Movie Reze Arc» era già in libreria come file sciolto (hardlink fatto a mano). Il motore proponeva una seconda destinazione, cioè un duplicato in Jellyfin. L’import automatico era spento, quindi non è successo nulla.
+**Scelta.** Prima di proporre e prima di importare, il worker indicizza `dev:inode` dei video presenti nelle quattro librerie. Se la sorgente è già presente, l’elemento risulta «già importato» con il percorso reale, senza nuovi collegamenti.
+
+## D-015 — Integrazione Armony con chiave API (2026-10-16)
+
+**Scelta.** Connettore Armony con chiave `arm_…` in Bearer: `/api/me`, `/api/live/stato`, `/api/stato`, `/api/log`. Comandi limitati a play/pause/toggle/next/prev/volume (niente transfer/handoff/enqueue). Registro e stato del server solo per gli admin; ogni comando va nell’audit.
+**Da rivedere se** Armony espone nuove capability utili (download, notifiche) o se serve il canale `/api/live` in streaming al posto del polling ogni 5 s.

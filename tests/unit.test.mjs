@@ -95,3 +95,43 @@ test('qbittorrent: autenticazione con API key Bearer (≥ 5.2)', async () => {
     srv.close();
   }
 });
+
+test('armony: chiave API Bearer, stato dal vivo, comandi limitati', async () => {
+  const http = await import('node:http');
+  const { armony } = await import('../apps/api/dist/connectors/others.js');
+  const sent = [];
+  const srv = http.createServer(async (req, res) => {
+    let b = '';
+    for await (const c of req) b += c;
+    if (req.url === '/api/info') return res.end(JSON.stringify({ armony: true, api: 1, version: '0.68.0', name: 'Casa' }));
+    if (req.headers.authorization !== 'Bearer arm_ok') return res.writeHead(401).end('{}');
+    if (req.url === '/api/me') return res.end(JSON.stringify({ user: 'gg', admin: true, version: '0.68.0', perm: { stats: true, upload: false } }));
+    if (req.url === '/api/live/stato')
+      return res.end(JSON.stringify({ now: 1, devices: [{ device: 'tv', name: 'TV' }], states: [{ device: 'tv', name: 'TV', playing: true, position: 10, duration: 200, volume: 40, shuffle: false, repeat: 'off', at: 1, radio: null, track: { id: 'x', title: 'Brano', artist: 'Artista', album: 'Album', serverUrl: 'http://segreto' } }] }));
+    if (req.url === '/api/live/cmd') {
+      sent.push(JSON.parse(b));
+      return res.end(JSON.stringify({ ok: true, id: 'c1' }));
+    }
+    res.writeHead(404).end('{}');
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const bl = buildBlockList(['127.0.0.0/8']);
+  const ctx = (key, auth = 'apikey') => ({ id: 'a', baseUrl: base, auth, secret: { apiKey: key }, config: {}, http: (p, i) => safeFetch(bl, base + p, i) });
+  try {
+    const ok = await armony.test(ctx('arm_ok'));
+    assert.equal(ok.status, 'online');
+    assert.match(ok.message, /gg \(amministratore\)/);
+    assert.equal((await armony.test(ctx('arm_no'))).status, 'unauthorized');
+    assert.equal((await armony.test(ctx('', 'none'))).status, 'online');
+    const live = await armony.resources.live(ctx('arm_ok'), new URLSearchParams());
+    assert.equal(live.devices[0].state.track.title, 'Brano');
+    assert.ok(!JSON.stringify(live).includes('segreto'), 'campi interni non esposti');
+    await armony.actions.command(ctx('arm_ok'), { to: 'tv', cmd: 'volume', value: 250 });
+    assert.deepEqual(sent[0], { to: 'tv', cmd: 'volume', value: 100, from: 'GIGI OS' });
+    await assert.rejects(armony.actions.command(ctx('arm_ok'), { to: 'tv', cmd: 'transfer' }), /non consentito/);
+    await assert.rejects(armony.resources.live(ctx('', 'none'), new URLSearchParams()), /chiave API/);
+  } finally {
+    srv.close();
+  }
+});

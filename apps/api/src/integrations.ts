@@ -266,6 +266,26 @@ export class Integrations {
     }
   }
 
+  isAdminResource(id: string, name: string) {
+    const r = this.row(id);
+    return (connectors[r.type]?.adminResources ?? []).includes(name);
+  }
+
+  async action(id: string, name: string, body: unknown) {
+    const r = this.row(id);
+    if (!r.enabled) throw new ConnectorError('Integrazione disabilitata', 'error', 409);
+    const fn = connectors[r.type]?.actions?.[name];
+    if (!fn) throw new ConnectorError('Azione non supportata da questa integrazione', 'unsupported', 404);
+    try {
+      const out = await fn(this.ctx(r), body);
+      this.invalidate(id);
+      return { integration: r.name, result: out };
+    } catch (e) {
+      const res = Integrations.toResult(e);
+      throw new ConnectorError(res.message, res.status, e instanceof ConnectorError ? e.httpStatus : 502);
+    }
+  }
+
   contextFor(id: string) {
     const r = this.row(id);
     return { row: r, ctx: this.ctx(r) };
@@ -276,7 +296,9 @@ export class Integrations {
     for (const t of types) {
       const def = connectors[t];
       if (!def || existing.has(t)) continue;
-      this.create({ type: t, name: def.defaultName, baseUrl: def.defaultUrl, auth: def.auth[0].id });
+      const open = def.auth.find((a) => a.fields.every((f) => !f.required));
+      if (!open) continue;
+      this.create({ type: t, name: def.defaultName, baseUrl: def.defaultUrl, auth: open.id });
     }
   }
 }

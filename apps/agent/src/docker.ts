@@ -6,7 +6,7 @@ import { redactArgs, redactEnv, redactLine, redactValue } from './redact.js';
 export const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET ?? '/var/run/docker.sock' });
 
 const PROTECTED = new Set(
-  (process.env.GIGI_PROTECTED_CONTAINERS ?? 'gigi-agent,gigi-api').split(',').map((s) => s.trim()).filter(Boolean),
+  (process.env.GIGI_PROTECTED_CONTAINERS ?? 'gigi-agent,gigi-api,gigi-media').split(',').map((s) => s.trim()).filter(Boolean),
 );
 const ALLOW = (process.env.GIGI_CONTROL_ALLOW ?? '*').split(',').map((s) => s.trim()).filter(Boolean);
 const STATS_INTERVAL = Number(process.env.GIGI_STATS_MS ?? 15000);

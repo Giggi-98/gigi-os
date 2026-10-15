@@ -40,6 +40,7 @@ const NAV: { group: string; items: Item[] }[] = [
     group: 'Servizi',
     items: [
       { to: '/media', label: 'Media', icon: <Clapperboard /> },
+      { to: '/media-automation', label: 'Media automation', icon: <Wand2 /> },
       { to: '/armony', label: 'Armony', icon: <Music2 /> },
     ],
   },
@@ -53,7 +54,6 @@ const NAV: { group: string; items: Item[] }[] = [
   {
     group: 'In arrivo',
     items: [
-      { to: '/in-arrivo/media-automation', label: 'Media automation', icon: <Wand2 />, soon: true },
       { to: '/in-arrivo/file', label: 'File manager', icon: <FolderTree />, soon: true },
       { to: '/in-arrivo/automazioni', label: 'Automazioni', icon: <Workflow />, soon: true },
       { to: '/in-arrivo/backup', label: 'Backup', icon: <DatabaseBackup />, soon: true },

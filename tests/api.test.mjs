@@ -174,6 +174,23 @@ test('ultimo admin non rimovibile né declassabile', async () => {
   assert.equal(r.statusCode, 409);
 });
 
+test('integrazioni: risorse sensibili e azioni solo per admin', async () => {
+  const h = { cookie: adminCookie, 'x-csrf-token': adminCsrf };
+  const l = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'ospite', password: 'altra-frase-lunga-sicura' } });
+  const vc = cookieOf(l);
+  const vcsrf = l.json().user.csrf;
+  const arm = (await app.inject({ method: 'GET', url: '/api/v1/integrations', headers: h })).json().find((i) => i.type === 'armony');
+  const log = await app.inject({ method: 'GET', url: `/api/v1/integrations/${arm.id}/resources/log`, headers: { cookie: vc } });
+  assert.equal(log.statusCode, 403);
+  const act = await app.inject({ method: 'POST', url: `/api/v1/integrations/${arm.id}/actions/command`, headers: { cookie: vc, 'x-csrf-token': vcsrf }, payload: { to: 'x', cmd: 'pause' } });
+  assert.equal(act.statusCode, 403);
+  const adminAct = await app.inject({ method: 'POST', url: `/api/v1/integrations/${arm.id}/actions/command`, headers: h, payload: { to: 'x', cmd: 'pause' } });
+  assert.equal(adminAct.statusCode, 409, 'senza chiave: rifiutato in modo controllato');
+  const audit = (await app.inject({ method: 'GET', url: '/api/v1/audit', headers: h })).json();
+  assert.ok(audit.some((a) => a.action === 'integration.action.command' && a.result === 'error'));
+});
+
+
 test('login: blocco dopo troppi tentativi falliti', async () => {
   let last;
   for (let i = 0; i < 6; i++) {
