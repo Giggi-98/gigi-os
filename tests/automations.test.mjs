@@ -125,3 +125,16 @@ test('notifiche: le risposte lunghe non vengono troncate (regressione Telegram g
     s2.close();
   }
 });
+
+test('eliminare un canale lo toglie dalle regole e le regole restano modificabili', () => {
+  const tmp = a.createChannel({ type: 'webhook', name: 'Da eliminare', config: { url: 'http://127.0.0.1:9/x' } });
+  const rid = a.saveRule({ name: 'Con canale', sources: [], minLevel: 'info', matchText: null, channels: [tmp], throttleMin: 0 });
+  a.deleteChannel(tmp);
+  const r = a.rules().find((x) => x.id === rid);
+  assert.deepEqual(r.channels, [], 'riferimento rimosso');
+  // dati già sporchi (come prima della correzione): il salvataggio non deve fallire
+  db.prepare('UPDATE automation_rules SET channels = ? WHERE id = ?').run(JSON.stringify(['00000000-0000-4000-8000-000000000000']), rid);
+  a.saveRule({ ...r, name: 'Modificata', channels: ['00000000-0000-4000-8000-000000000000'] }, rid);
+  assert.equal(a.rules().find((x) => x.id === rid).name, 'Modificata');
+  assert.equal(a.pruneDanglingChannels(), 0);
+});

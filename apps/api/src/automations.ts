@@ -149,6 +149,22 @@ export class Automations {
   deleteChannel(id: string) {
     this.channelRow(id);
     this.db.prepare('DELETE FROM notify_channels WHERE id = ?').run(id);
+    this.pruneDanglingChannels();
+  }
+
+  /** Toglie dalle regole i riferimenti a canali che non esistono più. Ritorna il numero di regole corrette. */
+  pruneDanglingChannels() {
+    const known = new Set((this.db.prepare('SELECT id FROM notify_channels').all() as { id: string }[]).map((r) => r.id));
+    let fixed = 0;
+    for (const r of this.db.prepare('SELECT id, channels FROM automation_rules').all() as { id: string; channels: string }[]) {
+      const list = JSON.parse(r.channels) as string[];
+      const clean = list.filter((c) => known.has(c));
+      if (clean.length !== list.length) {
+        this.db.prepare('UPDATE automation_rules SET channels = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(clean), Date.now(), r.id);
+        fixed++;
+      }
+    }
+    return fixed;
   }
 
   async send(channelId: string, title: string, body: string, level: Level) {
@@ -216,8 +232,9 @@ export class Automations {
     return (this.db.prepare('SELECT * FROM automation_rules ORDER BY created_at').all() as RuleRow[]).map((r) => this.ruleView(r));
   }
   saveRule(input: z.infer<typeof ruleSchema>, id?: string) {
+    // Canali eliminati nel frattempo: si scartano invece di bloccare il salvataggio della regola
     const known = new Set(this.channels().map((c) => c.id));
-    if (input.channels.some((c) => !known.has(c))) throw Object.assign(new Error('Canale inesistente'), { statusCode: 400 });
+    input = { ...input, channels: input.channels.filter((c) => known.has(c)) };
     const now = Date.now();
     const vals = [
       input.name,
@@ -337,6 +354,7 @@ export class Automations {
 
   /** Regole suggerite, create disattivate e senza canale finché l'utente non le collega. */
   seedRules() {
+    this.pruneDanglingChannels();
     if ((this.db.prepare('SELECT COUNT(*) AS n FROM automation_rules').get() as { n: number }).n > 0) return;
     const presets: [string, string[], Level, string | null, number][] = [
       ['Problemi ai container', ['docker'], 'warning', null, 30],
