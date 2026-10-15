@@ -60,7 +60,7 @@ const server = http.createServer(async (req, res) => {
       const b = await body<{ autoImport?: boolean; threshold?: number }>(req);
       return send(res, 200, engine.setSettings(b));
     }
-    m = /^\/v1\/items\/([^/]+)\/(import|override|ignore|restore|reanalyze)$/.exec(p);
+    m = /^\/v1\/items\/([^/]+)\/(import|override|ignore|restore|reanalyze|removed)$/.exec(p);
     if (req.method === 'POST' && m) {
       if (!ID.test(m[1])) return send(res, 400, { error: 'id non valido' });
       const b = await body<Ctx & { override?: Record<string, unknown> }>(req);
@@ -69,6 +69,7 @@ const server = http.createServer(async (req, res) => {
       if (m[2] === 'override') return send(res, 200, await engine.setOverride(id, b.override ?? {}, b.creds, b.actor));
       if (m[2] === 'ignore') return send(res, 200, engine.setIgnored(id, true, b.actor));
       if (m[2] === 'restore') return send(res, 200, engine.setIgnored(id, false, b.actor));
+      if (m[2] === 'removed') return send(res, 200, engine.setRemoved(id, b.actor, (b as { details?: unknown }).details));
       return send(res, 200, await engine.reanalyze(id, b.creds, b.actor));
     }
     send(res, 404, { error: 'route sconosciuta' });

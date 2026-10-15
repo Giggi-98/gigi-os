@@ -98,3 +98,26 @@ test('ricerca e intervalli di lettura', async () => {
   for await (const c of r.stream) got += c;
   assert.equal(got, 'bc');
 });
+
+test('elimina ovunque: solo lo stesso file del torrent, pulizia cartelle fino alla libreria esclusa', async () => {
+  const lib = path.join(media, 'Anime', 'Serie');
+  mkdirSync(path.join(lib, 'Show', 'Season 01'), { recursive: true });
+  mkdirSync(path.join(lib, 'Altra', 'Season 01'), { recursive: true });
+  writeFileSync(path.join(dl, 'src-ep.mkv'), 'episodio');
+  linkSync(path.join(dl, 'src-ep.mkv'), path.join(lib, 'Show', 'Season 01', 'Show - S01E01.mkv'));
+  writeFileSync(path.join(dl, 'src-ep.srt'), 'sub');
+  linkSync(path.join(dl, 'src-ep.srt'), path.join(lib, 'Show', 'Season 01', 'Show - S01E01.srt'));
+  writeFileSync(path.join(lib, 'Altra', 'Season 01', 'Altra - S01E01.mkv'), 'contenuto diverso');
+  const r = await f.purge('media', [
+    { path: 'Anime/Serie/Show/Season 01/Show - S01E01.mkv', src: path.join(dl, 'src-ep.mkv') },
+    { path: 'Anime/Serie/Show/Season 01/Show - S01E01.srt', src: path.join(dl, 'src-ep.srt') },
+    { path: 'Anime/Serie/Altra/Season 01/Altra - S01E01.mkv', src: path.join(dl, 'src-ep.mkv') },
+    { path: '../downloads/src-ep.mkv' },
+  ], 'Anime/Serie');
+  assert.deepEqual(r.removed.sort(), ['Anime/Serie/Show/Season 01/Show - S01E01.mkv', 'Anime/Serie/Show/Season 01/Show - S01E01.srt']);
+  assert.equal(r.skipped.length, 2);
+  assert.ok(existsSync(path.join(lib, 'Altra', 'Season 01', 'Altra - S01E01.mkv')), 'file diverso non toccato');
+  assert.ok(!existsSync(path.join(lib, 'Show')), 'cartelle vuote rimosse');
+  assert.ok(existsSync(lib), 'la cartella della libreria resta');
+  assert.ok(existsSync(path.join(dl, 'src-ep.mkv')), 'il download lo elimina qBittorrent, non il file manager');
+});

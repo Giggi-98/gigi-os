@@ -21,7 +21,8 @@ export type Status =
   | 'indexed'
   | 'ignored'
   | 'error'
-  | 'missing';
+  | 'missing'
+  | 'removed';
 
 type Row = {
   id: string;
@@ -300,7 +301,7 @@ export class Engine {
         try {
           st = await stat(src);
         } catch {
-          if (exists && !['imported', 'indexed', 'ignored'].includes(exists.status)) this.update(id, { status: 'missing', error: 'File non trovato sul disco' });
+          if (exists && !['imported', 'indexed', 'ignored', 'removed'].includes(exists.status)) this.update(id, { status: 'missing', error: 'File non trovato sul disco' });
           continue;
         }
         const mtime = Math.floor(st.mtimeMs);
@@ -451,6 +452,13 @@ export class Engine {
     this.update(id, { override: JSON.stringify(clean) });
     this.history(id, actor, 'corretto', clean);
     await this.analyze({ ...this.row(id), status: 'review', stable_since: 0 }, creds, actor);
+    return this.detail(id);
+  }
+
+  setRemoved(id: string, actor: string, details: unknown) {
+    this.row(id);
+    this.update(id, { status: 'removed', jf_item_id: null });
+    this.history(id, actor, 'eliminato ovunque', details);
     return this.detail(id);
   }
 

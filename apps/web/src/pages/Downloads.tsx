@@ -348,16 +348,31 @@ function TorrentsTab({ qb }: { qb: Integration }) {
 
 function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: Torrent[]; onClose: () => void }) {
   const toast = useToast();
+  const qc = useQueryClient();
   const act = useAction(qb);
-  const [files, setFiles] = useState(false);
+  const [mode, setMode] = useState<'everywhere' | 'files' | 'torrent'>('everywhere');
+  const [typed, setTyped] = useState('');
   const [blocked, setBlocked] = useState<string[] | null>(null);
   const [force, setForce] = useState(false);
-  const submit = () =>
+  const hashes = torrents.map((t) => t.hash);
+  const purge = useMutation({
+    mutationFn: () => api<{ torrentsDeleted: boolean; torrentError: string | null; libraryRemoved: string[]; skipped: { path: string; reason: string }[] }>('/downloads/purge', { method: 'POST', body: { hashes, confirm: typed } }),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ['resource', qb.id] });
+      void qc.invalidateQueries({ queryKey: ['media-items'] });
+      if (r.torrentError) toast('err', `Libreria ripulita, ma qBittorrent: ${r.torrentError}`);
+      else toast('ok', `Eliminato ovunque: ${torrents.length} torrent, ${r.libraryRemoved.length} file dalla libreria${r.skipped.length ? ` (${r.skipped.length} non toccati)` : ''}`);
+      onClose();
+    },
+    onError: (e: Error) => toast('err', e.message),
+  });
+  const submit = () => {
+    if (mode === 'everywhere') return purge.mutate();
     act.mutate(
-      { name: 'delete', body: { hashes: torrents.map((t) => t.hash), deleteFiles: files, force: blocked ? force : false } },
+      { name: 'delete', body: { hashes, deleteFiles: mode === 'files', force: blocked ? force : false } },
       {
         onSuccess: () => {
-          toast('ok', files ? 'Torrent e file scaricati eliminati' : 'Torrent rimossi da qBittorrent (file conservati)');
+          toast('ok', mode === 'files' ? 'Torrent e file scaricati eliminati (la libreria resta)' : 'Torrent rimossi da qBittorrent (file conservati)');
           onClose();
         },
         onError: (e) => {
@@ -367,47 +382,52 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
         },
       },
     );
+  };
+  const options: [typeof mode, string, string][] = [
+    ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e copia in libreria: il titolo sparisce anche da Jellyfin e Apollo e libera lo spazio.'],
+    ['files', 'Elimina torrent e file scaricati', 'La copia già importata in libreria resta disponibile in Jellyfin.'],
+    ['torrent', 'Rimuovi solo da qBittorrent', 'Tutti i file restano dove sono.'],
+  ];
+  const pending = act.isPending || purge.isPending;
   return (
     <Dialog
       open
       onClose={onClose}
       title={torrents.length === 1 ? 'Eliminare il torrent?' : `Eliminare ${torrents.length} torrent?`}
-      description="Il torrent viene rimosso da qBittorrent. I file già importati in libreria restano comunque: sono hardlink indipendenti."
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button variant="danger" onClick={submit} loading={act.isPending} disabled={!!blocked && !force}>
-            <Trash2 /> Elimina
+          <Button variant="ghost" onClick={onClose}>Annulla</Button>
+          <Button variant="danger" onClick={submit} loading={pending} disabled={(mode === 'everywhere' && typed !== 'ELIMINA') || (!!blocked && !force)}>
+            <Trash2 /> {mode === 'everywhere' ? 'Elimina ovunque' : 'Elimina'}
           </Button>
         </>
       }
     >
-      <ul className="mb-3 max-h-32 space-y-0.5 overflow-y-auto text-xs">
-        {torrents.map((t) => (
-          <li key={t.hash} className="truncate text-fg-2">
-            • {t.name}
-          </li>
-        ))}
+      <ul className="mb-3 max-h-28 space-y-0.5 overflow-y-auto text-xs">
+        {torrents.map((t) => <li key={t.hash} className="truncate text-fg-2">• {t.name}</li>)}
       </ul>
-      <label className="flex items-start gap-2 text-[13px]">
-        <input type="checkbox" className="mt-0.5 size-4 accent-[var(--err)]" checked={files} onChange={(e) => { setFiles(e.target.checked); setBlocked(null); setForce(false); }} />
-        <span>
-          Elimina anche i file scaricati da <span className="font-mono text-xs">/srv/downloads</span>
-          <span className="block text-xs text-muted">Senza questa opzione i file restano sul disco.</span>
-        </span>
-      </label>
+      <div role="radiogroup" aria-label="Cosa eliminare" className="space-y-2">
+        {options.map(([id, label, help]) => (
+          <label key={id} className={cx('flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-[13px]', mode === id ? 'border-err/50 bg-err-soft/40' : 'border-line hover:border-line-strong')}>
+            <input type="radio" name="delete-mode" className="mt-0.5 size-4 accent-[var(--err)]" checked={mode === id} onChange={() => { setMode(id); setBlocked(null); setForce(false); }} />
+            <span>
+              <span className="font-medium">{label}</span>
+              <span className="block text-xs text-muted">{help}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {mode === 'everywhere' && (
+        <div className="mt-3">
+          <Field label="Operazione definitiva: per confermare scrivi ELIMINA" help="Vengono eliminati solo i file di libreria che sono lo stesso file del torrent (stesso inode).">
+            {(id) => <Input id={id} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}
+          </Field>
+        </div>
+      )}
       {blocked && (
         <div className="mt-3 rounded-lg border border-err/30 bg-err-soft p-3 text-xs text-err">
           <p className="font-medium">Questi file non sono ancora nella libreria e verrebbero persi:</p>
-          <ul className="mt-1 space-y-0.5">
-            {blocked.map((f) => (
-              <li key={f} className="truncate">
-                • {f}
-              </li>
-            ))}
-          </ul>
+          <ul className="mt-1 space-y-0.5">{blocked.map((f) => <li key={f} className="truncate">• {f}</li>)}</ul>
           <label className="mt-2 flex items-center gap-2 text-fg">
             <input type="checkbox" className="size-4 accent-[var(--err)]" checked={force} onChange={(e) => setForce(e.target.checked)} />
             Ho capito, elimina comunque

@@ -60,8 +60,10 @@ export function followDockerEvents(agent: AgentClient, events: Events, log: (msg
           const e = JSON.parse(line) as { action: string; name: string | null; exitCode: string | null; id: string };
           const meta = DOCKER_ACTIONS[e.action];
           if (!meta || !e.name) return;
-          const exit = e.action === 'die' && e.exitCode && e.exitCode !== '0' ? ` (exit ${e.exitCode})` : '';
-          const level = e.action === 'die' && e.exitCode && e.exitCode !== '0' ? 'error' : meta.level;
+          // Arresti normali (0) o su richiesta (143 = SIGTERM, 130 = SIGINT) non sono problemi: solo informazione
+          const clean = !e.exitCode || ['0', '143', '130'].includes(e.exitCode);
+          const exit = e.action === 'die' && !clean ? ` (exit ${e.exitCode})` : '';
+          const level = e.action === 'die' ? (clean ? 'info' : 'error') : meta.level;
           events.add(level, 'docker', `${e.name} ${meta.label}${exit}`, null, `docker:${e.name}:${e.action}:${Math.floor(Date.now() / 5000)}`);
         } catch {}
       });

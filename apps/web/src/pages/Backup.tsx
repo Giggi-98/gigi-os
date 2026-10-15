@@ -5,7 +5,7 @@ import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, PageHeader,
 import { api } from '../lib/api';
 import { ago, bytes, dateTime } from '../lib/format';
 
-type Settings = { enabled: boolean; hour: string; keep: number; includeKey: boolean };
+type Settings = { enabled: boolean; hour: string; keep: number; includeKey: boolean; includeServices: boolean };
 type Data = { settings: Settings; backups: { name: string; size: number; created: number }[] };
 
 export function BackupPage() {
@@ -61,6 +61,13 @@ export function BackupPage() {
                 </Field>
               </div>
               <label className="flex items-start gap-2 text-[13px]">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={form.includeServices} onChange={(e) => setForm({ ...form, includeServices: e.target.checked })} />
+                <span>
+                  Includi le configurazioni dei servizi
+                  <span className="block text-xs text-muted">qBittorrent (impostazioni, categorie, elenco torrent) e Jellyfin (impostazioni, librerie, utenti e progressi di visione).</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-[13px]">
                 <input type="checkbox" className="mt-0.5 size-4 accent-[var(--warn)]" checked={form.includeKey} onChange={(e) => setForm({ ...form, includeKey: e.target.checked })} />
                 <span>
                   Includi la chiave master
@@ -96,7 +103,8 @@ export function BackupPage() {
             <div className="grid gap-4 text-xs text-muted md:grid-cols-2">
               <div className="space-y-1.5">
                 <p><b className="text-fg-2">Contenuto:</b> database di GIGI OS (utenti, integrazioni cifrate, regole, audit, layout), database del motore media, <span className="font-mono">.env</span>, <span className="font-mono">compose.yaml</span>{form.includeKey && ', chiave master'}.</p>
-                <p><b className="text-fg-2">Non contiene:</b> i tuoi media, i download, i dati di Jellyfin, Armony o Home Assistant (hanno i loro percorsi e i loro backup).</p>
+                {form.includeServices && <p><b className="text-fg-2">Servizi:</b> qBittorrent (impostazioni, categorie, dati di ripresa dei torrent) e Jellyfin (configurazione, definizione delle librerie, plugin, database con utenti e progressi), copiati senza fermarli.</p>}
+                <p><b className="text-fg-2">Non contiene:</b> i media e i download; i metadati di Jellyfin (si rigenerano); Home Assistant (usa il suo backup: Impostazioni → Sistema → Backup); Armony (ha già il suo backup in <span className="font-mono">data/backup</span>).</p>
                 <p className="flex items-start gap-1.5 text-warn"><AlertTriangle className="mt-px size-3.5 shrink-0" /> I backup stanno sullo stesso disco del server: scaricane periodicamente uno su un altro dispositivo.</p>
                 {!form.includeKey && <p className="flex items-start gap-1.5"><KeyRound className="mt-px size-3.5 shrink-0" /> Conserva a parte una copia di <span className="font-mono">/opt/gigi-os/secrets/master.key</span>.</p>}
               </div>

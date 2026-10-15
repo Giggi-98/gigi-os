@@ -6,6 +6,7 @@ import { Badge, Card, cx, Dialog, Empty, ErrorBox, Input, Kv, Meter, PageHeader,
 import { api } from '../lib/api';
 import { ago, bytes, dateTime, duration, pct, rate } from '../lib/format';
 import { useHistory, useSystem } from '../lib/queries';
+import { useAuth } from '../lib/auth';
 
 export function SystemPage() {
   const s = useSystem();
@@ -202,11 +203,9 @@ type SvcDetail = Svc & {
   memory: number | null;
   cpuNs: number | null;
   tasks: number | null;
-  restarts: number | null;
-  result: string | null;
-  execMainStatus: number | null;
-  user: string;
+  lastEvent: { state: 'failed' | 'ok'; ts: number; message: string } | null;
 };
+type JLine = { ts: number; priority: string; ident: string | null; message: string };
 
 const svcTone = (s: Svc): Tone => (s.active === 'failed' ? 'err' : s.active === 'active' ? (s.sub === 'running' ? 'ok' : 'info') : s.active === 'activating' ? 'warn' : 'idle');
 
@@ -269,7 +268,7 @@ function ServicesCard() {
         </div>
       )}
       <p className="mt-3 flex items-start gap-1.5 px-4 text-[11px] text-muted">
-        <Lock className="mt-px size-3 shrink-0" /> Sola lettura: l’agent non ha privilegi sui servizi dell’host. Avvio e riavvio richiedono una regola polkit dedicata (da autorizzare).
+        <Lock className="mt-px size-3 shrink-0" /> Sola lettura: stato dai cgroup e dal journal dell’host. Avvio e riavvio non sono abilitati per scelta (servirebbero privilegi sull’host).
       </p>
       {open && <ServiceDialog name={open} onClose={() => setOpen(null)} />}
     </Card>
@@ -277,29 +276,43 @@ function ServicesCard() {
 }
 
 function ServiceDialog({ name, onClose }: { name: string; onClose: () => void }) {
+  const { isAdmin } = useAuth();
   const d = useQuery({ queryKey: ['systemd', name], queryFn: () => api<SvcDetail>(`/systemd/services/${encodeURIComponent(name)}`) });
+  const j = useQuery({ queryKey: ['systemd-journal', name], queryFn: () => api<JLine[]>(`/systemd/services/${encodeURIComponent(name)}/journal?lines=150`), enabled: isAdmin });
   const s = d.data;
   return (
-    <Dialog open onClose={onClose} title={name} description={s?.description}>
+    <Dialog open wide onClose={onClose} title={name} description={s?.description}>
       {d.isError && <ErrorBox error={d.error} compact />}
       {!s && !d.isError && <Skeleton className="h-40" />}
       {s && (
         <dl>
           <Kv k="Stato"><Badge tone={svcTone(s)}>{s.active} · {s.sub}</Badge></Kv>
-          {s.active === 'active' && s.since && <Kv k="Attivo da">{dateTime(s.since)} ({ago(s.since)})</Kv>}
-          {s.active !== 'active' && s.inactiveSince && <Kv k="Fermo da">{dateTime(s.inactiveSince)}</Kv>}
-          {s.result && s.result !== 'success' && <Kv k="Esito ultimo avvio"><span className="text-err">{s.result} (codice {s.execMainStatus})</span></Kv>}
+          {s.lastEvent && <Kv k="Ultimo esito">{s.lastEvent.state === 'failed' ? <span className="text-err">{s.lastEvent.message}</span> : s.lastEvent.message} · {ago(s.lastEvent.ts)}</Kv>}
           <Kv k="Avvio automatico">{s.unitFileState || '—'}</Kv>
-          <Kv k="Utente">{s.user}</Kv>
           <Kv k="PID">{s.mainPid || '—'}</Kv>
           <Kv k="Memoria">{s.memory !== null ? bytes(s.memory) : '—'}</Kv>
           <Kv k="CPU totale">{s.cpuNs !== null ? `${(s.cpuNs / 1e9).toFixed(1)} s` : '—'}</Kv>
-          <Kv k="Task">{s.tasks ?? '—'}</Kv>
-          <Kv k="Riavvii automatici">{s.restarts ?? '—'}</Kv>
+          <Kv k="Processi">{s.tasks ?? '—'}</Kv>
           <Kv k="File unità" mono>{s.fragment || '—'}</Kv>
         </dl>
       )}
-      {s?.active === 'failed' && <p className="mt-3 text-xs text-muted">Per il dettaglio dell’errore: <span className="font-mono">journalctl -u {name} -n 30</span></p>}
+      {isAdmin && (
+        <div className="mt-4">
+          <div className="mb-1.5 text-xs font-medium text-fg-2">Log del servizio (journal)</div>
+          {j.isError && <ErrorBox error={j.error} compact />}
+          {!j.data && !j.isError && <Skeleton className="h-32" />}
+          {j.data && (
+            <div className="max-h-72 overflow-auto rounded-xl border border-line bg-[#07080b] p-2.5 font-mono text-[11px] leading-5 text-[#d7dae0]">
+              {j.data.length === 0 ? <span className="text-[#7a8291]">Nessuna riga.</span> : j.data.map((l, k) => (
+                <div key={k} className={cx('whitespace-pre-wrap break-all', ['emerg', 'alert', 'crit', 'err'].includes(l.priority) ? 'text-[#f6a5ad]' : l.priority === 'warning' ? 'text-[#f5d08a]' : '')}>
+                  <span className="text-[#5d6574]">{new Date(l.ts).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })} </span>
+                  {l.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </Dialog>
   );
 }

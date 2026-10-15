@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, Moon, Pencil, Plus, Send, Siren, Trash2, Workflow } from 'lucide-react';
+import { Bell, BellOff, Moon, Pencil, Plus, Search, Send, Siren, Trash2, Workflow } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge, Button, Card, cx, Dialog, Dot, Empty, ErrorBox, Field, Input, PageHeader, Select, Skeleton, Tabs, useToast, type Tone } from '../components/ui';
 import { api, type EventRow } from '../lib/api';
@@ -336,10 +336,11 @@ function ChannelDialog({ channel, onClose }: { channel: Channel | null; onClose:
         )}
         {type === 'telegram' && (
           <>
-            <Field label="Token del bot" help={stored('botToken') ? 'Salvato: lascia vuoto per mantenerlo.' : 'Da @BotFather.'}>
+            <Field label="Token del bot" help={stored('botToken') ? 'Salvato: lascia vuoto per mantenerlo.' : 'Crealo con @BotFather su Telegram (/newbot).'}>
               {(id) => <Input id={id} type="password" value={secret.botToken ?? ''} onChange={(e) => setSecret({ ...secret, botToken: e.target.value })} autoComplete="new-password" />}
             </Field>
-            <Field label="Chat ID">{(id) => <Input id={id} value={config.chatId ?? ''} onChange={(e) => set('chatId', e.target.value)} inputMode="numeric" />}</Field>
+            <TelegramDetect token={secret.botToken} channelId={channel?.id} chatId={config.chatId ?? ''} onPick={(id, name) => { set('chatId', id); if (!name.trim()) return; setName((n) => n || `Telegram · ${name}`); }} />
+            <Field label="Chat ID" help="Compilato da «Rileva», oppure inseriscilo a mano.">{(id) => <Input id={id} value={config.chatId ?? ''} onChange={(e) => set('chatId', e.target.value)} inputMode="numeric" />}</Field>
           </>
         )}
         {type === 'webhook' && (
@@ -353,6 +354,51 @@ function ChannelDialog({ channel, onClose }: { channel: Channel | null; onClose:
         {(save.isError || del.isError) && <ErrorBox error={save.error ?? del.error} compact />}
       </div>
     </Dialog>
+  );
+}
+
+type Detected = { bot: string; botName: string; chats: { id: string; type: string; name: string; lastSeen: number }[] };
+
+function TelegramDetect({ token, channelId, chatId, onPick }: { token?: string; channelId?: string; chatId: string; onPick: (id: string, name: string) => void }) {
+  const d = useMutation({
+    mutationFn: () => api<Detected>('/automations/telegram/detect', { method: 'POST', body: token ? { botToken: token } : { channelId } }),
+    onSuccess: (r) => {
+      if (r.chats.length === 1) onPick(r.chats[0].id, r.chats[0].name);
+    },
+  });
+  const canRun = !!token || !!channelId;
+  return (
+    <div className="rounded-xl border border-line bg-surface-2 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="min-w-0 flex-1 text-xs text-muted">
+          Scrivi un messaggio qualsiasi al bot (anche <span className="font-mono">/start</span>) dall’account o dal gruppo che deve ricevere le notifiche, poi premi «Rileva».
+        </p>
+        <Button size="sm" onClick={() => d.mutate()} loading={d.isPending} disabled={!canRun}>
+          <Search /> Rileva chat
+        </Button>
+      </div>
+      {d.isError && <div className="mt-2"><ErrorBox error={d.error} compact /></div>}
+      {d.data && (
+        <div className="mt-2.5">
+          <p className="mb-1.5 text-xs text-fg-2">Bot {d.data.bot} · {d.data.chats.length ? 'scegli la chat:' : 'nessun messaggio ricevuto: scrivi al bot e riprova.'}</p>
+          <ul className="space-y-1">
+            {d.data.chats.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(c.id, c.name)}
+                  className={cx('flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs', chatId === c.id ? 'border-accent bg-accent-soft' : 'border-line hover:border-line-strong')}
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium">{c.name}</span>
+                  <Badge>{c.type}</Badge>
+                  <span className="font-mono text-[11px] text-muted">{c.id}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

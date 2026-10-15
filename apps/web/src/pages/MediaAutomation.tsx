@@ -13,6 +13,7 @@ import {
   RefreshCw,
   RotateCcw,
   ScanSearch,
+  Trash2,
   Tv,
   Wand2,
   X,
@@ -112,13 +113,14 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
   ignored: { label: 'Ignorato', tone: 'idle' },
   error: { label: 'Errore', tone: 'err' },
   missing: { label: 'File mancante', tone: 'err' },
+  removed: { label: 'Eliminato', tone: 'idle' },
 };
 
 const GROUPS = {
   todo: ['review', 'ready', 'conflict', 'error', 'missing'],
   waiting: ['waiting', 'importing'],
   done: ['imported', 'indexed'],
-  ignored: ['ignored'],
+  ignored: ['ignored', 'removed'],
 } as const;
 type Group = keyof typeof GROUPS;
 
@@ -248,7 +250,7 @@ export function MediaAutomationPage() {
           { id: 'todo', label: 'Da gestire', count: n(GROUPS.todo) },
           { id: 'waiting', label: 'In attesa', count: n(GROUPS.waiting) },
           { id: 'done', label: 'Importati', count: n(GROUPS.done) },
-          { id: 'ignored', label: 'Ignorati', count: n(GROUPS.ignored) },
+          { id: 'ignored', label: 'Ignorati ed eliminati', count: n(GROUPS.ignored) },
         ]}
       />
       <div className="mt-4">
@@ -345,6 +347,17 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
   const q = useQuery({ queryKey: ['media-item', id], queryFn: () => api<Item>(`/media/items/${id}`), refetchInterval: 8_000 });
   const [confirm, setConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [purge, setPurge] = useState(false);
+  const [typed, setTyped] = useState('');
+  const purgeM = useMutation({
+    mutationFn: () => api<{ removed: string[]; skipped: { path: string; reason: string }[] }>(`/media/items/${id}/purge`, { method: 'POST', body: { confirm: typed } }),
+    onSuccess: (r) => {
+      onChanged();
+      setPurge(false);
+      toast(r.removed.length ? 'ok' : 'err', r.removed.length ? `Rimosso dalla libreria (${r.removed.length} file); Jellyfin aggiornato` : `Niente da rimuovere${r.skipped[0] ? `: ${r.skipped[0].reason}` : ''}`);
+    },
+    onError: (e: Error) => toast('err', e.message),
+  });
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && !confirm && !editing && onClose();
@@ -407,6 +420,11 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
             {canEdit && i.status !== 'ignored' && (
               <Button size="sm" variant="ghost" onClick={() => act.mutate('ignore')}>
                 <EyeOff /> Ignora
+              </Button>
+            )}
+            {['imported', 'indexed'].includes(i.status) && (
+              <Button size="sm" variant="ghost" className="text-err" onClick={() => setPurge(true)}>
+                <Trash2 /> Elimina dalla libreria
               </Button>
             )}
             {i.status === 'ignored' && (
@@ -592,6 +610,23 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
         </Dialog>
       )}
       {i && editing && <OverrideDialog item={i} onClose={() => setEditing(false)} onDone={onChanged} />}
+      {i?.plan && (
+        <Dialog
+          open={purge}
+          onClose={() => setPurge(false)}
+          title="Eliminare dalla libreria?"
+          description="Il file viene cancellato definitivamente dalla libreria e sparisce da Jellyfin e Apollo. Il torrent in qBittorrent non viene toccato."
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setPurge(false)}>Annulla</Button>
+              <Button variant="danger" disabled={typed !== 'ELIMINA'} loading={purgeM.isPending} onClick={() => purgeM.mutate()}><Trash2 /> Elimina</Button>
+            </>
+          }
+        >
+          <p className="mb-3 font-mono text-xs break-all text-fg-2">{i.plan.dest}</p>
+          <Field label="Per confermare scrivi ELIMINA">{(fid) => <Input id={fid} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}</Field>
+        </Dialog>
+      )}
     </div>
   );
 }

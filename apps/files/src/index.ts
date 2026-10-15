@@ -66,6 +66,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/v1/trash') return send(res, 200, await files.trash(b.root, b.items));
       if (p === '/v1/restore') return send(res, 200, await files.restore(b.root, b.batch, b.name));
       if (p === '/v1/empty-trash') return send(res, 200, await files.emptyTrash(b.root, b.batch));
+      if (p === '/v1/purge') return send(res, 200, await files.purge(b.root, b.items, b.stopAt));
     }
     send(res, 404, { error: 'route sconosciuta' });
   } catch (e) {

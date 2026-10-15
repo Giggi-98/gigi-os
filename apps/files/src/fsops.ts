@@ -1,7 +1,7 @@
 // Operazioni sul filesystem confinate a radici consentite. Ogni percorso è risolto con realpath e verificato
 // dentro la radice: niente "..", niente symlink che portano fuori. Le eliminazioni passano dal cestino.
 import { constants, createReadStream, createWriteStream } from 'node:fs';
-import { copyFile, link, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, link, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
@@ -250,6 +250,60 @@ export class Files {
     if (!target.startsWith(path.join(root.path, TRASH))) throw new FsError('Percorso non valido', 403);
     await rm(target, { recursive: true, force: true });
     return { ok: true };
+  }
+
+  /**
+   * Eliminazione DEFINITIVA di file della libreria legati a un download (usata da «Elimina ovunque»).
+   * Solo file regolari; se la sorgente esiste ancora, si elimina solo se è lo stesso file (stesso inode).
+   * Le cartelle rimaste vuote vengono rimosse risalendo fino a `stopAt` escluso (la cartella della libreria).
+   */
+  async purge(rootId: unknown, items: unknown, stopAt: unknown) {
+    const root = this.root(rootId);
+    const list = Array.isArray(items) ? (items as { path?: unknown; src?: unknown }[]) : [];
+    if (!list.length || list.length > 200) throw new FsError('Da 1 a 200 file');
+    const stop = await this.resolve(rootId, stopAt);
+    const removed: string[] = [];
+    const skipped: { path: string; reason: string }[] = [];
+    const dirs = new Set<string>();
+    for (const it of list) {
+      let target;
+      try {
+        target = await this.resolve(rootId, it.path);
+      } catch (e) {
+        skipped.push({ path: String(it.path), reason: (e as Error).message });
+        continue;
+      }
+      if (!target.abs.startsWith(stop.abs + path.sep)) {
+        skipped.push({ path: target.rel, reason: 'fuori dalla cartella della libreria' });
+        continue;
+      }
+      const st = await lstat(target.abs);
+      if (!st.isFile()) {
+        skipped.push({ path: target.rel, reason: 'non è un file' });
+        continue;
+      }
+      if (typeof it.src === 'string' && it.src) {
+        const src = await lstat(it.src).catch(() => null);
+        if (src && (src.ino !== st.ino || src.dev !== st.dev)) {
+          skipped.push({ path: target.rel, reason: 'file diverso da quello del torrent: non toccato' });
+          continue;
+        }
+      }
+      await rm(target.abs);
+      removed.push(target.rel);
+      dirs.add(path.dirname(target.abs));
+    }
+    // Pulizia cartelle vuote (Season NN, cartella serie/film), mai la cartella della libreria
+    for (let d of dirs) {
+      while (d.startsWith(stop.abs + path.sep)) {
+        const left = await readdir(d).catch(() => ['?']);
+        if (left.length) break;
+        await rmdir(d).catch(() => undefined);
+        d = path.dirname(d);
+      }
+    }
+    void root;
+    return { removed, skipped };
   }
 
   async search(rootId: unknown, rel: unknown, q: unknown) {

@@ -24,11 +24,30 @@ test('backup: tar.gz valido, database integri, chiave esclusa di default, retent
   writeFileSync(path.join(base, 'master.key'), 'a'.repeat(64));
   const events = new Events(db);
   const out = path.join(base, 'backups');
-  const b = new Backups(db, data, out, [{ label: 'env', file: path.join(base, '.env') }], path.join(base, 'master.key'), events);
+  const svc = path.join(base, 'svc');
+  mkdirSync(path.join(svc, 'BT_backup'), { recursive: true });
+  writeFileSync(path.join(svc, 'qBittorrent.conf'), '[Preferences]');
+  writeFileSync(path.join(svc, 'qBittorrent.log'), 'log da non includere');
+  const longName = 'a'.repeat(40) + '.fastresume';
+  writeFileSync(path.join(svc, 'BT_backup', longName), 'resume');
+  const deep = path.join(svc, 'root', 'default', 'Una cartella con un nome piuttosto lungo per la libreria anime');
+  mkdirSync(deep, { recursive: true });
+  writeFileSync(path.join(deep, 'options-con-nome-lungo-per-superare-i-cento-caratteri.xml'), '<x/>');
+  const live = new DatabaseSync(path.join(svc, 'servizio.db'));
+  live.exec("PRAGMA journal_mode=WAL; CREATE TABLE u (n TEXT); INSERT INTO u VALUES ('utente');");
+  const b = new Backups(db, data, out, [{ label: 'env', file: path.join(base, '.env') }], path.join(base, 'master.key'), events, [
+    { name: 'servizio', root: svc, include: /^(qBittorrent\.conf|BT_backup\/.+\.fastresume|root\/.+)$/, sqlite: ['servizio.db'] },
+  ]);
 
   const r = await b.run('test');
   const listing = execFileSync('tar', ['-tzf', path.join(out, r.name)], { encoding: 'utf8' }).trim().split('\n').sort();
-  assert.deepEqual(listing, ['MANIFEST.json', 'config/env', 'data/gigi.sqlite', 'data/media.sqlite']);
+  assert.deepEqual(listing.filter((x) => !x.startsWith('services/')), ['MANIFEST.json', 'config/env', 'data/gigi.sqlite', 'data/media.sqlite']);
+  const svcFiles = listing.filter((x) => x.startsWith('services/'));
+  assert.ok(svcFiles.includes('services/servizio/qBittorrent.conf'));
+  assert.ok(svcFiles.includes(`services/servizio/BT_backup/${longName}`));
+  assert.ok(svcFiles.some((x) => x.endsWith('options-con-nome-lungo-per-superare-i-cento-caratteri.xml')), 'nomi > 100 caratteri tramite prefix ustar');
+  assert.ok(svcFiles.includes('services/servizio/servizio.db'), 'database copiato a caldo');
+  assert.ok(!svcFiles.some((x) => x.endsWith('.log')), 'log esclusi');
   const x = path.join(base, 'x');
   mkdirSync(x);
   execFileSync('tar', ['-xzf', path.join(out, r.name), '-C', x]);
@@ -37,10 +56,14 @@ test('backup: tar.gz valido, database integri, chiave esclusa di default, retent
   assert.equal(restored.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
   restored.close();
   assert.equal(JSON.parse(readFileSync(path.join(x, 'MANIFEST.json'), 'utf8')).includesMasterKey, false);
+  const copy = new DatabaseSync(path.join(x, 'services/servizio/servizio.db'), { readOnly: true });
+  assert.equal(copy.prepare('SELECT n FROM u').get().n, 'utente', 'contenuto ancora nel WAL incluso');
+  copy.close();
+  live.close();
   assert.ok(!existsSync(path.join(x, 'secrets')));
   assert.ok(events.list(5).some((e) => e.source === 'backup' && e.level === 'info'));
 
-  b.setSettings({ enabled: true, hour: '03:30', keep: 2, includeKey: true });
+  b.setSettings({ enabled: true, hour: '03:30', keep: 2, includeKey: true, includeServices: true });
   await new Promise((res) => setTimeout(res, 1100));
   const r2 = await b.run('test');
   assert.ok(execFileSync('tar', ['-tzf', path.join(out, r2.name)], { encoding: 'utf8' }).includes('secrets/master.key'));

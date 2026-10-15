@@ -291,6 +291,44 @@ export class Automations {
     }
   }
 
+  /**
+   * Rilevamento del Chat ID Telegram: legge le conversazioni recenti del bot (getUpdates).
+   * L'utente deve aver scritto almeno un messaggio al bot (anche /start).
+   */
+  async telegramDetect(botToken: string | undefined, channelId?: string) {
+    let token = botToken?.trim();
+    if (!token && channelId) {
+      const r = this.channelRow(channelId);
+      token = r.secret_enc ? (JSON.parse(this.vault.decrypt(r.secret_enc, `channel:${r.id}`)) as Record<string, string>).botToken : undefined;
+    }
+    if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw Object.assign(new Error('Token del bot non valido (formato 123456:ABC…)'), { statusCode: 400 });
+    const call = async (method: string) => {
+      try {
+        const txt = await notifyFetch(this.allowedLan, this.privateList, `https://api.telegram.org/bot${token}/${method}`, { method: 'GET' });
+        return JSON.parse(txt) as { ok: boolean; result: unknown; description?: string };
+      } catch (e) {
+        const msg = (e as Error).message.replaceAll(token!, '•••');
+        throw Object.assign(new Error(/401|404|Unauthorized|Not Found/i.test(msg) ? 'Token rifiutato da Telegram: controlla di averlo copiato per intero da @BotFather' : /409|webhook/i.test(msg) ? 'Il bot ha un webhook attivo: getUpdates non è disponibile' : `Telegram: ${msg}`), { statusCode: 502 });
+      }
+    };
+    const me = (await call('getMe')).result as { username: string; first_name: string };
+    const updates = (await call('getUpdates?limit=100&allowed_updates=%5B%22message%22%2C%22channel_post%22%2C%22my_chat_member%22%5D')).result as {
+      message?: { chat: Chat; date: number };
+      channel_post?: { chat: Chat; date: number };
+      my_chat_member?: { chat: Chat; date: number };
+    }[];
+    type Chat = { id: number; type: string; title?: string; first_name?: string; last_name?: string; username?: string };
+    const chats = new Map<number, { id: string; type: string; name: string; lastSeen: number }>();
+    for (const u of updates) {
+      const x = u.message ?? u.channel_post ?? u.my_chat_member;
+      if (!x) continue;
+      const c = x.chat;
+      const name = c.title ?? ([c.first_name, c.last_name].filter(Boolean).join(' ') || (c.username ? `@${c.username}` : String(c.id)));
+      chats.set(c.id, { id: String(c.id), type: c.type === 'private' ? 'privata' : c.type === 'channel' ? 'canale' : 'gruppo', name, lastSeen: x.date * 1000 });
+    }
+    return { bot: `@${me.username}`, botName: me.first_name, chats: [...chats.values()].sort((a, b) => b.lastSeen - a.lastSeen) };
+  }
+
   history(limit = 100) {
     return this.db.prepare('SELECT * FROM notifications ORDER BY id DESC LIMIT ?').all(Math.min(limit, 500));
   }
@@ -368,6 +406,17 @@ export function registerAutomations(app: FastifyInstance, a: Automations, events
     } catch (e) {
       audit.log(req, 'automation.channel.test', 'error', id, { err: (e as Error).message });
       return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
+
+  app.post('/api/v1/automations/telegram/detect', admin, async (req, reply) => {
+    const b = z.object({ botToken: z.string().max(200).optional(), channelId: z.string().uuid().optional() }).parse(req.body ?? {});
+    try {
+      return await a.telegramDetect(b.botToken, b.channelId);
+    } catch (e) {
+      const err = e as Error & { statusCode?: number };
+      // Messaggi già ripuliti dal token: si mostrano così come sono anche per gli errori di rete (502)
+      return reply.code(err.statusCode ?? 502).send({ error: err.message });
     }
   });
 

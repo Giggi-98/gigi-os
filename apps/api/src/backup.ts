@@ -14,7 +14,15 @@ import type { Audit } from './security.js';
 /** Header ustar minimale (file regolari, nomi < 100 caratteri). */
 function tarEntry(name: string, data: Buffer, mtime = Math.floor(Date.now() / 1000)): Buffer {
   const h = Buffer.alloc(512, 0);
+  let prefix = '';
+  if (Buffer.byteLength(name) > 99) {
+    const cut = name.lastIndexOf('/', 154);
+    if (cut <= 0 || Buffer.byteLength(name.slice(cut + 1)) > 99) throw new Error(`Nome troppo lungo per l'archivio: ${name}`);
+    prefix = name.slice(0, cut);
+    name = name.slice(cut + 1);
+  }
   h.write(name, 0, 100, 'utf8');
+  if (prefix) h.write(prefix, 345, 155, 'utf8');
   h.write('0000600\0', 100);
   h.write('0001750\0', 108);
   h.write('0001750\0', 116);
@@ -31,7 +39,10 @@ function tarEntry(name: string, data: Buffer, mtime = Math.floor(Date.now() / 10
   return Buffer.concat([h, data, pad]);
 }
 
-export type BackupSettings = { enabled: boolean; hour: string; keep: number; includeKey: boolean };
+export type BackupSettings = { enabled: boolean; hour: string; keep: number; includeKey: boolean; includeServices: boolean };
+
+/** Configurazioni di altri servizi: radice montata in sola lettura, file da includere, database SQLite da copiare a caldo. */
+export type ServiceSource = { name: string; root: string; include: RegExp; sqlite?: string[] };
 const NAME = /^gigi-os-\d{8}-\d{6}\.tar\.gz$/;
 
 export class Backups {
@@ -44,11 +55,28 @@ export class Backups {
     private extra: { label: string; file: string }[],
     private keyFile: string,
     private events: Events,
+    private services: ServiceSource[] = [],
   ) {}
+
+  private async walk(root: string, rel = ''): Promise<string[]> {
+    const out: string[] = [];
+    let ents;
+    try {
+      ents = await readdir(path.join(root, rel), { withFileTypes: true });
+    } catch {
+      return out;
+    }
+    for (const e of ents) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) out.push(...(await this.walk(root, r)));
+      else if (e.isFile()) out.push(r);
+    }
+    return out;
+  }
 
   settings(): BackupSettings {
     const s = JSON.parse(getSetting(this.db, 'backup.settings') ?? '{}') as Partial<BackupSettings>;
-    return { enabled: s.enabled ?? true, hour: s.hour ?? '03:30', keep: s.keep ?? 14, includeKey: s.includeKey ?? false };
+    return { enabled: s.enabled ?? true, hour: s.hour ?? '03:30', keep: s.keep ?? 14, includeKey: s.includeKey ?? false, includeServices: s.includeServices ?? true };
   }
   setSettings(s: BackupSettings) {
     setSetting(this.db, 'backup.settings', JSON.stringify(s));
@@ -104,6 +132,28 @@ export class Backups {
         add(`data/${label}`, await readFile(tmp));
       }
       for (const x of this.extra) if (existsSync(x.file)) add(`config/${x.label}`, await readFile(x.file));
+      const svcReport: Record<string, number> = {};
+      if (this.settings().includeServices) {
+        for (const svc of this.services) {
+          if (!existsSync(svc.root)) continue;
+          let n = 0;
+          for (const rel of await this.walk(svc.root)) {
+            if (svc.sqlite?.includes(rel)) {
+              const tmp = path.join(work, `${svc.name}-${path.basename(rel)}`);
+              this.snapshot(path.join(svc.root, rel), tmp);
+              add(`services/${svc.name}/${rel}`, await readFile(tmp));
+              n++;
+            } else if (svc.include.test(rel) && !/-(wal|shm|journal)$/.test(rel)) {
+              const st = await stat(path.join(svc.root, rel));
+              if (st.size > 50 * 1024 * 1024) continue;
+              add(`services/${svc.name}/${rel}`, await readFile(path.join(svc.root, rel)));
+              n++;
+            }
+          }
+          svcReport[svc.name] = n;
+        }
+      }
+      manifest.services = svcReport;
       const s = this.settings();
       if (s.includeKey && existsSync(this.keyFile)) add('secrets/master.key', await readFile(this.keyFile));
       manifest.includesMasterKey = s.includeKey;
@@ -165,7 +215,7 @@ export function registerBackups(app: FastifyInstance, b: Backups, audit: Audit, 
     return r;
   });
   app.put('/api/v1/backups/settings', admin, async (req) => {
-    const s = z.object({ enabled: z.boolean(), hour: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), keep: z.number().int().min(1).max(90), includeKey: z.boolean() }).parse(req.body);
+    const s = z.object({ enabled: z.boolean(), hour: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), keep: z.number().int().min(1).max(90), includeKey: z.boolean(), includeServices: z.boolean().default(true) }).parse(req.body);
     audit.log(req, 'backup.settings', 'ok', null, s);
     return b.setSettings(s);
   });

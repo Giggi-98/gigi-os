@@ -23,7 +23,85 @@ export class MediaBridge {
     private agent: AgentClient,
     private integrations: Integrations,
     private events: Events,
+    private files?: AgentClient,
   ) {}
+
+  /**
+   * Elimina dalla libreria i file importati dagli elementi indicati (solo se sono lo stesso file del download),
+   * notifica Jellyfin della rimozione e marca gli elementi come «rimossi».
+   */
+  private async purgeLibrary(items: { id: string; fileName: string; srcPath: string; status: string; plan: { dest: string; libraryRoot: string; subtitles?: { src: string; dest: string }[] } | null }[], actor: string) {
+    if (!this.files) throw Object.assign(new Error('File manager non disponibile'), { statusCode: 503 });
+    const roots = await this.files.json<{ id: string; path: string }[]>('GET', '/v1/roots');
+    const creds = await this.creds();
+    const removed: string[] = [];
+    const skipped: { path: string; reason: string }[] = [];
+    for (const it of items) {
+      if (!it.plan || !['imported', 'indexed'].includes(it.status)) continue;
+      const root = roots.find((r) => it.plan!.dest.startsWith(r.path + '/'));
+      if (!root) {
+        skipped.push({ path: it.plan.dest, reason: 'fuori dalle cartelle gestite' });
+        continue;
+      }
+      const rel = (p: string) => p.slice(root.path.length + 1);
+      const list = [{ path: rel(it.plan.dest), src: it.srcPath }, ...(it.plan.subtitles ?? []).map((s) => ({ path: rel(s.dest), src: s.src }))];
+      const r = await this.files.json<{ removed: string[]; skipped: { path: string; reason: string }[] }>('POST', '/v1/purge', 60_000, {
+        root: root.id,
+        items: list,
+        stopAt: rel(it.plan.libraryRoot),
+      });
+      skipped.push(...r.skipped);
+      const full = r.removed.map((x) => `${root.path}/${x}`);
+      removed.push(...full);
+      if (creds.jf && full.length) {
+        const jfPaths = full
+          .map((p) => {
+            const m = creds.jfPathMap.find((x) => p.startsWith(x.host + '/'));
+            return m ? m.jf + p.slice(m.host.length) : null;
+          })
+          .filter((x): x is string => !!x);
+        if (jfPaths.length) {
+          await fetch(`${creds.jf.baseUrl}/Library/Media/Updated`, {
+            method: 'POST',
+            headers: {
+              Authorization: `MediaBrowser Client="GIGI OS", Device="gigi-os", DeviceId="gigi-os", Version="0.2.0", Token="${creds.jf.apiKey}"`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ Updates: jfPaths.map((Path) => ({ Path, UpdateType: 'Deleted' })) }),
+            signal: AbortSignal.timeout(10_000),
+          }).catch(() => undefined);
+        }
+      }
+      if (r.removed.length || !r.skipped.length) {
+        await this.media.json('POST', `/v1/items/${it.id}/removed`, 10_000, { actor, details: { rimossi: full } });
+      }
+    }
+    return { removed, skipped };
+  }
+
+  /** «Elimina ovunque»: libreria (con verifica inode) → qBittorrent con file → Jellyfin → stato media. */
+  async purgeEverywhere(hashes: string[], actor: string) {
+    const all = await this.media.json<{ id: string; torrentHash: string; fileName: string; srcPath: string; status: string; plan: never }[]>('GET', '/v1/items?limit=1000');
+    const set = new Set(hashes.map((h) => h.toLowerCase()));
+    const items = all.filter((i) => set.has(i.torrentHash.toLowerCase()));
+    const lib = await this.purgeLibrary(items, actor);
+    const qb = this.integrations.list().find((i) => i.type === 'qbittorrent' && i.enabled);
+    let torrentsDeleted = false;
+    let torrentError: string | null = null;
+    if (qb) {
+      try {
+        await this.integrations.action(qb.id, 'delete', { hashes, deleteFiles: true });
+        torrentsDeleted = true;
+      } catch (e) {
+        torrentError = (e as Error).message;
+      }
+    }
+    for (const it of items.filter((i) => !['imported', 'indexed', 'removed'].includes(i.status))) {
+      await this.media.json('POST', `/v1/items/${it.id}/removed`, 10_000, { actor, details: { motivo: 'torrent eliminato' } }).catch(() => undefined);
+    }
+    this.events.add('info', 'media', `Eliminato ovunque da ${actor}: ${hashes.length} torrent, ${lib.removed.length} file di libreria`);
+    return { torrentsDeleted, torrentError, libraryRemoved: lib.removed, skipped: lib.skipped };
+  }
 
   private async mounts(container: string | undefined): Promise<Mount[]> {
     if (!container) return [];
@@ -144,6 +222,26 @@ export class MediaBridge {
     app.post('/api/v1/media/items/:id/ignore', admin, action('ignore'));
     app.post('/api/v1/media/items/:id/restore', admin, action('restore'));
     app.post('/api/v1/media/items/:id/reanalyze', admin, action('reanalyze'));
+
+    app.post('/api/v1/downloads/purge', admin, async (req, reply) => {
+      const b = z.object({ hashes: z.array(z.string().regex(/^[a-f0-9]{40}$|^[a-f0-9]{64}$/)).min(1).max(100), confirm: z.string() }).parse(req.body);
+      if (b.confirm !== 'ELIMINA') return reply.code(400).send({ error: 'Conferma richiesta: scrivi ELIMINA' });
+      const r = await this.purgeEverywhere(b.hashes, who(req));
+      audit.log(req, 'downloads.purge', r.torrentError ? 'error' : 'ok', `${b.hashes.length} torrent`, r);
+      return r;
+    });
+
+    app.post('/api/v1/media/items/:id/purge', admin, async (req, reply) => {
+      const { id } = req.params as { id: string };
+      if (!ID.test(id)) return badId(reply);
+      const b = z.object({ confirm: z.string() }).parse(req.body);
+      if (b.confirm !== 'ELIMINA') return reply.code(400).send({ error: 'Conferma richiesta: scrivi ELIMINA' });
+      const item = await m.json<{ id: string; fileName: string; srcPath: string; status: string; plan: never }>('GET', `/v1/items/${id}`);
+      const r = await this.purgeLibrary([item], who(req));
+      audit.log(req, 'media.purge', 'ok', item.fileName, r);
+      this.events.add('info', 'media', `Rimosso dalla libreria da ${who(req)}: ${item.fileName}`);
+      return r;
+    });
 
     app.post('/api/v1/media/items/:id/override', admin, async (req, reply) => {
       const { id } = req.params as { id: string };

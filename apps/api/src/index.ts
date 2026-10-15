@@ -30,9 +30,21 @@ async function main() {
   const automations = new Automations(db, vault, integrations, buildBlockList(config.allowedTargets), buildBlockList, (m, e) => log('warn', m, e ?? {}));
   automations.seedRules();
   events.onAdd = (e) => automations.onEvent(e);
-  const backups = new Backups(db, config.dataDir, config.backupDir, config.backupExtra, config.masterKeyFile, events);
+  const backups = new Backups(db, config.dataDir, config.backupDir, config.backupExtra, config.masterKeyFile, events, [
+    {
+      name: 'qbittorrent',
+      root: '/backup-src/qbittorrent',
+      include: /^(qBittorrent\.conf|qBittorrent-data\.conf|categories\.json|watched_folders\.json|BT_backup\/[^/]+\.(fastresume|torrent)|rss\/.+)$/,
+    },
+    {
+      name: 'jellyfin',
+      root: '/backup-src/jellyfin',
+      include: /^(config\/[^/]+\.xml|root\/.+|plugins\/configurations\/.+\.xml)$/,
+      sqlite: ['data/jellyfin.db'],
+    },
+  ]);
   backups.schedule((m, e) => log('warn', m, e ?? {}));
-  const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events);
+  const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events, new AgentClient(config.filesSocket, 'File manager'));
 
   // Codice di setup monouso: serve solo finché non esiste alcun utente.
   const tokenFile = path.join(config.dataDir, 'setup-token');

@@ -106,3 +106,8 @@ test('download completati: niente notifiche retroattive, poi un evento per hash'
   const ev = events.list(50).filter((e) => e.source === 'download');
   assert.deepEqual(ev.map((e) => e.title), ['Download completato: Nuovo']);
 });
+
+test('telegram: rilevamento chat rifiuta token non validi senza chiamare la rete', async () => {
+  await assert.rejects(a.telegramDetect('non-un-token'), (e) => e.statusCode === 400);
+  await assert.rejects(a.telegramDetect(undefined), (e) => e.statusCode === 400);
+});

@@ -79,6 +79,12 @@ services:
       - ./backups:/backups
       - ./.env:/backup-src/.env:ro
       - ./compose.yaml:/backup-src/compose.yaml:ro
+      # Configurazioni di altri servizi per il backup, in sola lettura e limitate alle sottocartelle necessarie
+      - /opt/docker/qbittorrent/config/qBittorrent:/backup-src/qbittorrent:ro
+      - /opt/docker/jellyfin/config/config:/backup-src/jellyfin/config:ro
+      - /opt/docker/jellyfin/config/root:/backup-src/jellyfin/root:ro
+      - /opt/docker/jellyfin/config/plugins/configurations:/backup-src/jellyfin/plugins/configurations:ro
+      - /opt/docker/jellyfin/config/data:/backup-src/jellyfin/data:ro
       - gigi-run:/run/gigi
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('https://'+process.env.GIGI_BIND+':'+process.env.GIGI_PORT+'/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]

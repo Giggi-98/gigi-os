@@ -130,3 +130,19 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Contesto.** Da utente non privilegiato, D-Bus consente di leggere unità e proprietà di systemd (verificato sull’host con l’utente 1000: 190 servizi letti, `RestartUnit` negato con `InteractiveAuthorizationRequired`). Dentro il container, però, il profilo AppArmor `docker-default` blocca anche la connessione al bus (`Hello`).
 **Scelta attuale.** L’agent gestisce l’errore (prima mandava in crash il processo: corretto, dopo il fix 0 riavvii) e l’interfaccia mostra la causa. Nessuna modifica di sicurezza applicata senza consenso.
 **Opzioni da autorizzare.** (a) `security_opt: apparmor=unconfined` solo per `gigi-agent`: l’agent ha già `docker.sock`, quindi è già equivalente a root, e l’aumento di privilegi è minimo. (b) Un profilo AppArmor dedicato che consenta solo D-Bus verso `org.freedesktop.systemd1`: richiede di caricare un profilo sull’host. Avvio/riavvio richiederebbero inoltre una regola polkit limitata a servizi in allowlist.
+
+## D-021 — systemd e journal senza D-Bus, sola lettura (2026-10-16) — supera D-020
+
+**Contesto.** Il permesso di disattivare AppArmor per `gigi-agent` è stato negato dalle protezioni dell’ambiente: rimane il profilo `docker-default`.
+**Scelta.** Lo stato dei servizi si ricava da fonti in sola lettura dell’host: cgroup v2 (`/sys/fs/cgroup/system.slice`: in esecuzione, memoria, CPU, processi), file delle unità (descrizione, abilitazione) e journal persistente tramite `journalctl` (eventi del PID 1 per «in errore», log per servizio, errori di sistema delle ultime 24 h). L’agent ha un’immagine Debian trixie dedicata (journalctl 257, compatibile con il journal di systemd 259) e il gruppo `systemd-journal`. D-Bus è stato rimosso del tutto.
+**Avvio/riavvio.** Non abilitati: servirebbe una regola polkit che darebbe gli stessi poteri anche all’utente `gigi` dell’host, con rischi reali (ssh, docker) a fronte di un beneficio limitato.
+
+## D-022 — «Elimina ovunque» (2026-10-16) — eccezione esplicita a D-011
+
+**Contesto.** L’utente vuole che eliminare un torrent possa rimuovere il contenuto ovunque: download, libreria, Jellyfin e Apollo.
+**Scelta.** Opzione esplicita, preselezionata ma confermata scrivendo «ELIMINA». Ordine: (1) `gigi-files` elimina in modo definitivo i file di libreria registrati dal motore media, **solo se hanno lo stesso inode della sorgente** del torrent (un file diverso con lo stesso nome non viene toccato) e ripulisce le cartelle vuote fino alla libreria esclusa; (2) qBittorrent elimina il torrent con i file; (3) Jellyfin riceve `UpdateType: Deleted`; (4) gli elementi del motore media diventano «rimossi». Il motore media in sé continua a non eliminare mai nulla: l’eliminazione passa da `gigi-files`, orchestrata dall’API e registrata nell’audit.
+
+## D-023 — Aggiunta torrent verificata (2026-10-16)
+
+**Contesto.** `/torrents/add` risponde «Ok.» prima di scaricare il link. Un risultato di LimeTorrents puntava a una pagina HTML e l’aggiunta falliva in silenzio, mentre GIGI OS mostrava «Aggiunto».
+**Scelta.** I risultati di ricerca vengono risolti con `search/downloadTorrent` del plugin, come fa l’interfaccia di qBittorrent. Ogni aggiunta è confermata solo quando compare un nuovo hash (attesa massima 20 s); se nel log di qBittorrent compare un errore di aggiunta, viene mostrato all’utente con una spiegazione.
