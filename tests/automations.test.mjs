@@ -111,3 +111,17 @@ test('telegram: rilevamento chat rifiuta token non validi senza chiamare la rete
   await assert.rejects(a.telegramDetect('non-un-token'), (e) => e.statusCode === 400);
   await assert.rejects(a.telegramDetect(undefined), (e) => e.statusCode === 400);
 });
+
+test('notifiche: le risposte lunghe non vengono troncate (regressione Telegram getUpdates)', async () => {
+  const { notifyFetch } = await import('../apps/api/dist/automations.js');
+  const long = JSON.stringify({ ok: true, result: Array.from({ length: 50 }, (_, i) => ({ update_id: i, message: { date: 1, chat: { id: 1000 + i, type: 'private', first_name: 'Nome lungo per superare i trecento caratteri' } } })) });
+  const s2 = http.createServer((req, res) => res.end(long));
+  await new Promise((r) => s2.listen(0, '127.0.0.1', r));
+  try {
+    const text = await notifyFetch(buildBlockList(['127.0.0.0/8']), buildBlockList(['127.0.0.0/8']), `http://127.0.0.1:${s2.address().port}/x`, { method: 'GET' });
+    assert.ok(long.length > 300);
+    assert.equal(JSON.parse(text).result.length, 50, 'JSON completo e interpretabile');
+  } finally {
+    s2.close();
+  }
+});

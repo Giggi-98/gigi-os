@@ -33,7 +33,7 @@ export type EventLike = { level: Level; source: string; title: string; details?:
 const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '169.254.0.0/16', '100.64.0.0/10', '0.0.0.0/8', '::1/128', 'fc00::/7', 'fe80::/10'];
 
 /** Destinazioni di notifica: Internet pubblico consentito; indirizzi privati solo se nelle reti LAN autorizzate. */
-async function notifyFetch(allowedLan: BlockList, privateList: BlockList, url: string, init: RequestInit) {
+export async function notifyFetch(allowedLan: BlockList, privateList: BlockList, url: string, init: RequestInit) {
   const u = validateUrl(url);
   const host = u.hostname.replace(/^\[|\]$/g, '');
   const addrs = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
@@ -42,8 +42,10 @@ async function notifyFetch(allowedLan: BlockList, privateList: BlockList, url: s
     if (privateList.check(a.address, fam) && !allowedLan.check(a.address, fam)) throw new TargetError(`Destinazione ${a.address} non consentita`, 'forbidden_target');
   }
   const res = await fetch(u, { ...init, redirect: 'manual', signal: AbortSignal.timeout(10_000) });
-  const text = (await res.text()).slice(0, 300);
-  if (!res.ok) throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ''}`);
+  const text = await res.text();
+  if (text.length > 2 * 1024 * 1024) throw new Error('Risposta troppo grande');
+  // Solo il messaggio d'errore viene accorciato: il corpo completo serve a chi deve interpretarlo (es. JSON di Telegram)
+  if (!res.ok) throw new Error(`HTTP ${res.status}${text ? `: ${text.slice(0, 300)}` : ''}`);
   return text;
 }
 
