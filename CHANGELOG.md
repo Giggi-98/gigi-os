@@ -8,6 +8,7 @@ Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEG
 Prima versione pubblica.
 
 - **Aggiornamento in un comando:** `sudo ./update.sh` scarica l’ultima versione, ricostruisce le immagini, salva una copia dei dati e, se la nuova versione non parte, torna da sola alla precedente. La pagina Aggiornamenti e il digest avvisano quando esce una versione nuova.
+- **Elimina dalla libreria:** da Media si cerca un film, una serie o un episodio e lo si toglie (cestino o definitivo), insieme ai torrent con gli stessi file; sparisce da Jellyfin e Apollo in pochi secondi. «Elimina ovunque» trova le copie in libreria anche se importate prima di GIGI OS e dice prima cosa sparirà.
 - **Dispositivi fidati per la verifica in due passaggi:** «Ricorda questo dispositivo» al login, per un periodo scelto dall’amministratore (da 1 a 90 giorni, oppure mai).
 - **Installazione su qualsiasi server:** `install.sh` rileva IP, gruppi, fuso orario e configurazioni di Jellyfin e qBittorrent; nessun valore di un server specifico nel codice.
 - **Interfaccia in italiano e inglese** (menu, componenti comuni, login, 2FA, dashboard; le altre pagine sono ancora in italiano).
