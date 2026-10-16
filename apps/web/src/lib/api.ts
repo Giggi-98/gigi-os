@@ -59,7 +59,7 @@ export type User = {
   /** setupRequired: ruolo con 2FA obbligatoria ma non ancora configurata (il backend blocca tutto il resto). */
   mfa: { enabled: boolean; required: boolean; setupRequired: boolean };
 };
-export type LoginResult = { user: User; recoveryLeft?: number } | { mfaRequired: true; ticket: string };
+export type LoginResult = { user: User; recoveryLeft?: number } | { mfaRequired: true; ticket: string; trustDays?: number };
 export type AuthState = { setupRequired: boolean; user: User | null };
 
 export type SystemSnapshot = {

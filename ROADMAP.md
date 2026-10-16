@@ -1,6 +1,6 @@
 # Cose da fare
 
-Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-035).
+Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-036).
 
 ## 1. Traduzioni (fase C, in corso — D-035)
 
@@ -41,6 +41,7 @@ Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.
 
 - [ ] App Android (Capacitor, guscio che apre GIGI OS dalla LAN, certificato reso fidato) — blocco 5 della V6
 - [ ] Launcher: riordino con trascinamento; link diretti ai titoli in Apollo (prima verificare il formato dei suoi link)
+- [ ] Controllo release di GIGI OS (`GIGI_RELEASE_REPO`): oggi legge `releases/latest` senza autenticazione, quindi funziona solo con la repo pubblica e almeno una release; valutare un token in sola lettura nel vault per repo private
 - [ ] Aggiornamenti: leggere `/run/reboot-required`; aggiornamento con un clic per gli stack autorizzati esplicitamente
 
 ## 5. Da guardare su questo server (Gigi-Mini-Pc)

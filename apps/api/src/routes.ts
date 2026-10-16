@@ -17,7 +17,7 @@ import { registerTelegram } from './telegram.js';
 import { registerDigest } from './digest.js';
 import { registerUpdates } from './updates.js';
 import { atLeast, COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
-import { MFA_REQUIRED } from './mfa.js';
+import { MFA_REQUIRED, TRUST_COOKIE, TRUST_DAYS } from './mfa.js';
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const UUID = /^[0-9a-f-]{36}$/;
@@ -152,17 +152,22 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
         audit.log(req, 'auth.login', 'denied', username);
         return reply.code(401).send({ error: 'Utente o password errati' });
       }
-      // Con la verifica in due passaggi la sessione nasce solo dopo il codice (POST /auth/login/mfa).
+      // Con la verifica in due passaggi la sessione nasce solo dopo il codice (POST /auth/login/mfa),
+      // salvo un dispositivo attendibile di questo utente non ancora scaduto (D-036).
       if (mfa?.enabled(u.id)) {
+        if (mfa.checkDevice(u.id, req.cookies[TRUST_COOKIE])) {
+          limiter.clear([`user:${username.toLowerCase()}`]);
+          return startSession(req, reply, u, 'trusted');
+        }
         audit.log(req, 'auth.login.password', 'ok', u.username);
-        return { mfaRequired: true, ticket: mfa.ticket(u.id) };
+        return { mfaRequired: true, ticket: mfa.ticket(u.id), trustDays: mfa.trustDays() };
       }
       limiter.clear([`user:${username.toLowerCase()}`]);
       return startSession(req, reply, u, null);
     },
   );
 
-  const startSession = (req: FastifyRequest, reply: FastifyReply, u: { id: string; username: string; role: Role }, method: 'totp' | 'recovery' | null) => {
+  const startSession = (req: FastifyRequest, reply: FastifyReply, u: { id: string; username: string; role: Role }, method: 'totp' | 'recovery' | 'trusted' | null) => {
     db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), u.id);
     const s = sessions.create(u.id, req.ip, req.headers['user-agent'] ?? '');
     setCookie(reply, s.token);
@@ -176,7 +181,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req, reply) => {
       if (!mfa) return reply.code(404).send({ error: 'Non disponibile' });
-      const body = z.object({ ticket: z.string().min(10).max(100), code: z.string().trim().min(6).max(20) }).safeParse(req.body);
+      const body = z.object({ ticket: z.string().min(10).max(100), code: z.string().trim().min(6).max(20), remember: z.boolean().optional() }).safeParse(req.body);
       if (!body.success) return reply.code(400).send({ error: 'Codice non valido' });
       const userId = mfa.useTicket(body.data.ticket);
       if (!userId) return reply.code(401).send({ error: 'Accesso scaduto: inserisci di nuovo nome utente e password', code: 'ticket_expired' });
@@ -198,6 +203,14 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       }
       mfa.dropTicket(body.data.ticket);
       limiter.clear([`user:${u.username.toLowerCase()}`]);
+      if (body.data.remember) {
+        const dev = mfa.trustDevice(u.id, req.headers['user-agent'] ?? '', req.ip);
+        if (dev) {
+          // Inviato solo alle route di autenticazione: nessun'altra richiesta lo porta con sé
+          reply.setCookie(TRUST_COOKIE, dev.token, { httpOnly: true, secure: d.secureCookies, sameSite: 'strict', path: '/api/v1/auth', maxAge: dev.maxAgeSec });
+          audit.log(req, 'mfa.device.trust', 'ok', u.username, { giorni: mfa.trustDays() });
+        }
+      }
       return startSession(req, reply, u, method);
     },
   );
@@ -234,6 +247,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
         return reply.code(400).send({ error: 'Codice non valido: controlla che l’ora del telefono sia corretta e riprova' });
       }
       sessions.destroyForUser(r.user.id, r.user.tokenHash);
+      mfa.forgetDevices(r.user.id);
       audit.log(req, 'mfa.enable', 'ok', r.user.username);
       events.add('info', 'sicurezza', `Verifica in due passaggi attivata per ${r.user.username}`);
       return { recoveryCodes: codes };
@@ -261,6 +275,34 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       audit.log(req, 'mfa.disable', 'ok', r.user.username);
       events.add('warning', 'sicurezza', `Verifica in due passaggi disattivata per ${r.user.username}`);
       return { ok: true, setupRequired: MFA_REQUIRED.has(r.user.role) };
+    });
+
+    // Dispositivi attendibili (D-036)
+    app.get('/api/v1/auth/devices', enrolling, async (req) => {
+      const r = req as Authed;
+      return { trustDays: mfa.trustDays(), devices: mfa.devices(r.user.id, req.cookies[TRUST_COOKIE]) };
+    });
+    app.delete('/api/v1/auth/devices/:id', enrolling, async (req, reply) => {
+      const r = req as Authed;
+      const { id } = req.params as { id: string };
+      if (!UUID.test(id) || !mfa.forgetDevice(r.user.id, id)) return reply.code(404).send({ error: 'Dispositivo non trovato' });
+      audit.log(req, 'mfa.device.forget', 'ok', r.user.username);
+      return { ok: true };
+    });
+    app.delete('/api/v1/auth/devices', enrolling, async (req, reply) => {
+      const r = req as Authed;
+      const n = mfa.forgetDevices(r.user.id);
+      reply.clearCookie(TRUST_COOKIE, { path: '/api/v1/auth' });
+      audit.log(req, 'mfa.device.forget', 'ok', r.user.username, { tutti: n });
+      return { ok: true, removed: n };
+    });
+    app.get('/api/v1/security/mfa-policy', viewer, async () => ({ trustDays: mfa.trustDays(), options: TRUST_DAYS }));
+    app.put('/api/v1/security/mfa-policy', admin, async (req) => {
+      const { trustDays } = z.object({ trustDays: z.number().int() }).parse(req.body);
+      mfa.setTrustDays(trustDays);
+      audit.log(req, 'mfa.policy', 'ok', null, { trustDays });
+      events.add(trustDays ? 'info' : 'warning', 'sicurezza', trustDays ? `Dispositivi attendibili: ${trustDays} giorni` : 'Dispositivi attendibili disattivati');
+      return { trustDays: mfa.trustDays() };
     });
 
     app.delete('/api/v1/users/:id/mfa', admin, async (req, reply) => {
@@ -298,6 +340,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     if (problem) return reply.code(400).send({ error: problem });
     db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(await hashPassword(body.next), Date.now(), r.user.id);
     sessions.destroyForUser(r.user.id, r.user.tokenHash);
+    mfa?.forgetDevices(r.user.id);
     audit.log(req, 'auth.password', 'ok', r.user.username);
     return { ok: true };
   });
@@ -384,11 +427,15 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       if (problem) return reply.code(400).send({ error: problem });
       db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(await hashPassword(body.password), Date.now(), id);
       sessions.destroyForUser(id);
+      mfa?.forgetDevices(id);
     }
     if (body.role) db.prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?').run(body.role, Date.now(), id);
     if (body.disabled !== undefined) {
       db.prepare('UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?').run(body.disabled ? 1 : 0, Date.now(), id);
-      if (body.disabled) sessions.destroyForUser(id);
+      if (body.disabled) {
+        sessions.destroyForUser(id);
+        mfa?.forgetDevices(id);
+      }
     }
     audit.log(req, 'user.update', 'ok', u.username, { role: body.role, disabled: body.disabled, passwordReset: body.password !== undefined });
     return { ok: true };

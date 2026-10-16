@@ -1,8 +1,8 @@
 // Verifica in due passaggi (D-029): TOTP RFC 6238 (HMAC-SHA1, 6 cifre, 30 s) con node:crypto, nessuna dipendenza.
 // Segreto cifrato nel vault, codice non riutilizzabile, codici di recupero monouso salvati come SHA-256.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { DB } from './db.js';
-import type { Role } from './security.js';
+import { getSetting, setSetting, type DB } from './db.js';
+import { newId, type Role } from './security.js';
 import type { Vault } from './vault.js';
 
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -70,6 +70,17 @@ export const otpauthUri = (secret: string, username: string) =>
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 const normRecovery = (c: string) => c.toUpperCase().replace(/[^A-Z2-7]/g, '');
+
+/** Periodi che l'admin può scegliere per i dispositivi attendibili, in giorni (0 = disattivati). */
+export const TRUST_DAYS = [0, 1, 7, 14, 30, 60, 90];
+export const TRUST_COOKIE = 'gigi_trust';
+
+/** Nome leggibile del dispositivo dallo user agent (solo per riconoscerlo nell'elenco). */
+export function deviceLabel(ua: string) {
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  return os ? `${browser} · ${os}` : browser;
+}
 
 /** Ruoli per cui la verifica in due passaggi è obbligatoria (scelta dell'utente, 2026-10-16). */
 export const MFA_REQUIRED: ReadonlySet<Role> = new Set(['admin', 'operator']);
@@ -152,6 +163,74 @@ export class Mfa {
 
   disable(userId: string) {
     this.db.prepare('DELETE FROM user_mfa WHERE user_id = ?').run(userId);
+    // Senza 2FA (o con una nuova configurazione) i dispositivi attendibili di prima non valgono più
+    this.forgetDevices(userId);
+  }
+
+  // ───────── dispositivi attendibili (D-036) ─────────
+  /** Giorni per cui un dispositivo può saltare la 2FA dopo un codice corretto (0 = mai). Lo sceglie l'admin. */
+  trustDays(): number {
+    const v = Number(getSetting(this.db, 'mfa.trustDays') ?? 30);
+    return TRUST_DAYS.includes(v) ? v : 30;
+  }
+
+  setTrustDays(days: number) {
+    if (!TRUST_DAYS.includes(days)) throw Object.assign(new Error('Periodo non valido'), { statusCode: 400 });
+    setSetting(this.db, 'mfa.trustDays', String(days));
+    // Un periodo più corto vale subito anche per i dispositivi già registrati
+    if (days === 0) this.db.prepare('DELETE FROM trusted_devices').run();
+    else this.db.prepare('UPDATE trusted_devices SET expires_at = MIN(expires_at, created_at + ?)').run(days * 86400_000);
+  }
+
+  /** Registra il dispositivo dopo un codice corretto: restituisce il token del cookie (nel database solo il suo hash). */
+  trustDevice(userId: string, userAgent: string, ip: string) {
+    const days = this.trustDays();
+    if (!days) return null;
+    const token = randomBytes(32).toString('base64url');
+    const now = this.now();
+    const expires = now + days * 86400_000;
+    this.db
+      .prepare('INSERT INTO trusted_devices (id, user_id, token_hash, label, ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(newId(), userId, sha256(token), deviceLabel(userAgent), ip.slice(0, 64), now, expires);
+    // Al massimo 20 dispositivi per utente: i più vecchi escono
+    this.db.prepare('DELETE FROM trusted_devices WHERE user_id = ? AND id NOT IN (SELECT id FROM trusted_devices WHERE user_id = ? ORDER BY created_at DESC LIMIT 20)').run(userId, userId);
+    return { token, maxAgeSec: days * 86400 };
+  }
+
+  /** Il token del cookie è di questo utente e non è scaduto? */
+  checkDevice(userId: string, token: string | undefined): boolean {
+    if (!token || token.length > 100 || !this.trustDays()) return false;
+    const row = this.db.prepare('SELECT id, expires_at FROM trusted_devices WHERE user_id = ? AND token_hash = ?').get(userId, sha256(token)) as { id: string; expires_at: number } | undefined;
+    if (!row) return false;
+    if (row.expires_at < this.now()) {
+      this.db.prepare('DELETE FROM trusted_devices WHERE id = ?').run(row.id);
+      return false;
+    }
+    this.db.prepare('UPDATE trusted_devices SET last_used_at = ? WHERE id = ?').run(this.now(), row.id);
+    return true;
+  }
+
+  devices(userId: string, currentToken?: string) {
+    const cur = currentToken ? sha256(currentToken) : null;
+    return (
+      this.db.prepare('SELECT id, token_hash, label, ip, created_at, expires_at, last_used_at FROM trusted_devices WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC').all(userId, this.now()) as {
+        id: string;
+        token_hash: string;
+        label: string;
+        ip: string | null;
+        created_at: number;
+        expires_at: number;
+        last_used_at: number | null;
+      }[]
+    ).map((d) => ({ id: d.id, label: d.label, ip: d.ip, createdAt: d.created_at, expiresAt: d.expires_at, lastUsedAt: d.last_used_at, current: d.token_hash === cur }));
+  }
+
+  forgetDevice(userId: string, id: string) {
+    return this.db.prepare('DELETE FROM trusted_devices WHERE user_id = ? AND id = ?').run(userId, id).changes > 0;
+  }
+
+  forgetDevices(userId: string) {
+    return this.db.prepare('DELETE FROM trusted_devices WHERE user_id = ?').run(userId).changes;
   }
 
   private newRecovery() {

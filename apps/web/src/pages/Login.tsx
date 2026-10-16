@@ -1,4 +1,4 @@
-import { t, tr } from '../lib/i18n';
+import { t, tn, tr } from '../lib/i18n';
 import { ArrowLeft, KeyRound, Loader2, ShieldCheck, Smartphone } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type LoginResult, type User } from '../lib/api';
@@ -17,6 +17,8 @@ export function Login({ setup }: { setup: boolean }) {
   const [ticket, setTicket] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
+  const [trustDays, setTrustDays] = useState(0);
+  const [remember, setRemember] = useState(false);
   const toast = useToast();
 
   async function submit(e: FormEvent) {
@@ -31,6 +33,7 @@ export function Login({ setup }: { setup: boolean }) {
       });
       if ('mfaRequired' in r) {
         setTicket(r.ticket);
+        setTrustDays(r.trustDays ?? 0);
         setPassword('');
       } else setUser(r.user);
     } catch (err) {
@@ -45,7 +48,7 @@ export function Login({ setup }: { setup: boolean }) {
     setError(null);
     setBusy(true);
     try {
-      const r = await api<{ user: User; recoveryLeft?: number }>('/auth/login/mfa', { method: 'POST', body: { ticket, code } });
+      const r = await api<{ user: User; recoveryLeft?: number }>('/auth/login/mfa', { method: 'POST', body: { ticket, code, remember: trustDays > 0 && remember } });
       if (r.recoveryLeft !== undefined)
         toast(r.recoveryLeft <= 3 ? 'err' : 'info', t('Codice di recupero usato: ne restano {n}. Puoi generarne di nuovi in Sicurezza.', { n: r.recoveryLeft }));
       setUser(r.user);
@@ -73,6 +76,15 @@ export function Login({ setup }: { setup: boolean }) {
             <Field label={useRecovery ? t('Codice di recupero') : t('Codice a 6 cifre per {user}', { user: username })}>
               {(id) => <CodeInput id={id} value={code} onChange={setCode} recovery={useRecovery} />}
             </Field>
+            {trustDays > 0 && (
+              <label className="flex items-start gap-2 text-[13px] text-fg-2">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="mt-0.5 size-4 [--check:var(--accent)]" />
+                <span>
+                  {tn(trustDays, 'Ricorda questo dispositivo per 1 giorno', 'Ricorda questo dispositivo per {n} giorni')}
+                  <span className="block text-xs text-muted">{t('Su questo browser il codice non verrà chiesto. Non usarlo su computer condivisi.')}</span>
+                </span>
+              </label>
+            )}
             {error !== null && <ErrorBox error={error} compact />}
             <Button type="submit" variant="primary" className="w-full" disabled={busy || (!useRecovery && code.length !== 6)}>
               {busy ? <Loader2 className="animate-spin" /> : <ShieldCheck />} {t('Verifica')}

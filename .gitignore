@@ -12,3 +12,6 @@ data/*
 backup*/
 screenshots/
 backups/
+
+# Impostazioni specifiche di ogni server (si parte da compose.override.example.yaml o le genera install.sh)
+compose.override.yaml

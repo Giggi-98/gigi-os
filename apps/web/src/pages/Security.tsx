@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, MonitorSmartphone, ScrollText, ShieldCheck, ShieldOff, Smartphone, UserPlus, Users } from 'lucide-react';
+import { Fingerprint, KeyRound, MonitorSmartphone, ScrollText, ShieldCheck, ShieldOff, Smartphone, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Card, cx, Dialog, Empty, ErrorBox, Field, Input, PageHeader, Select, Skeleton, Tabs, useToast } from '../components/ui';
 import { api, ROLE_LABEL, type Role } from '../lib/api';
@@ -111,7 +111,107 @@ function Account() {
           ))}
         </ul>
       </Card>
+      <TrustedDevicesCard />
     </div>
+  );
+}
+
+type TrustedDevice = { id: string; label: string; ip: string | null; createdAt: number; expiresAt: number; lastUsedAt: number | null; current: boolean };
+
+/** Browser che non chiedono il codice 2FA per un periodo scelto dall'amministratore (D-036). */
+function TrustedDevicesCard() {
+  const { isAdmin } = useAuth();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const mfa = useQuery({ queryKey: ['mfa'], queryFn: () => api<{ enabled: boolean }>('/auth/mfa') });
+  const q = useQuery({ queryKey: ['trusted-devices'], queryFn: () => api<{ trustDays: number; devices: TrustedDevice[] }>('/auth/devices'), enabled: mfa.data?.enabled === true });
+  const policy = useQuery({ queryKey: ['mfa-policy'], queryFn: () => api<{ trustDays: number; options: number[] }>('/security/mfa-policy'), enabled: isAdmin });
+  const done = () => {
+    void qc.invalidateQueries({ queryKey: ['trusted-devices'] });
+    void qc.invalidateQueries({ queryKey: ['mfa-policy'] });
+  };
+  const forget = useMutation({
+    mutationFn: (id: string | null) => api(id ? `/auth/devices/${id}` : '/auth/devices', { method: 'DELETE' }),
+    onSuccess: (_r, id) => {
+      toast('ok', id ? 'Dispositivo rimosso: al prossimo accesso chiederà il codice' : 'Tutti i dispositivi rimossi');
+      done();
+    },
+    onError: (e: Error) => toast('err', e.message),
+  });
+  const setPolicy = useMutation({
+    mutationFn: (trustDays: number) => api('/security/mfa-policy', { method: 'PUT', body: { trustDays } }),
+    onSuccess: (_r, d) => {
+      toast('ok', d === 0 ? 'Dispositivi fidati disattivati: il codice verrà chiesto a ogni accesso' : `Periodo impostato a ${d} ${d === 1 ? 'giorno' : 'giorni'}`);
+      done();
+    },
+    onError: (e: Error) => toast('err', e.message),
+  });
+  const days = policy.data?.trustDays ?? q.data?.trustDays;
+  const devices = q.data?.devices ?? [];
+  return (
+    <Card
+      title="Dispositivi fidati"
+      icon={<Fingerprint />}
+      subtitle={
+        days === undefined
+          ? 'Browser su cui il codice della verifica in due passaggi non viene chiesto.'
+          : days === 0
+            ? 'Disattivati: il codice viene chiesto a ogni accesso.'
+            : `Su questi browser il codice viene chiesto di nuovo dopo ${days} ${days === 1 ? 'giorno' : 'giorni'}.`
+      }
+      className="lg:col-span-2"
+      actions={
+        devices.length > 0 && (
+          <Button size="sm" variant="ghost" onClick={() => forget.mutate(null)} loading={forget.isPending && forget.variables === null}>
+            Rimuovi tutti
+          </Button>
+        )
+      }
+    >
+      {isAdmin && policy.data && (
+        <Field label="Chiedi di nuovo il codice dopo" help="Vale per tutti gli utenti. Accorciarlo vale anche per i dispositivi già ricordati.">
+          {(id) => (
+            <Select id={id} className="max-w-xs" value={policy.data.trustDays} disabled={setPolicy.isPending} onChange={(e) => setPolicy.mutate(Number(e.target.value))}>
+              {policy.data.options.map((d) => (
+                <option key={d} value={d}>
+                  {d === 0 ? 'Ogni accesso (disattivati)' : `${d} ${d === 1 ? 'giorno' : 'giorni'}`}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      )}
+      {mfa.data && !mfa.data.enabled && <p className="text-xs text-muted">Attiva la verifica in due passaggi per poter ricordare un dispositivo.</p>}
+      {q.isError && <ErrorBox error={q.error} compact />}
+      {mfa.data?.enabled && !q.data && !q.isError && <Skeleton className="h-12" />}
+      {q.data && devices.length === 0 && (
+        <Empty title="Nessun dispositivo ricordato">{q.data.trustDays > 0 && 'Al login, dopo il codice, spunta «Ricorda questo dispositivo».'}</Empty>
+      )}
+      {devices.length > 0 && (
+        <ul className={cx('space-y-2', isAdmin && 'mt-3')}>
+          {devices.map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs">
+              <span className="font-medium text-fg-2">{d.label}</span>
+              {d.current && <Badge tone="ok">questo browser</Badge>}
+              <span className="text-muted">{d.ip ?? '—'}</span>
+              <span className="text-muted" title={`Ricordato il ${dateTime(d.createdAt)}`}>
+                {d.lastUsedAt ? `usato ${ago(d.lastUsedAt)}` : 'mai usato'} · scade il {dateTime(d.expiresAt)}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ml-auto"
+                onClick={() => forget.mutate(d.id)}
+                loading={forget.isPending && forget.variables === d.id}
+                aria-label={`Rimuovi ${d.label}`}
+              >
+                Rimuovi
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

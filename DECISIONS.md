@@ -273,3 +273,15 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Alternative scartate.** `react-i18next`/`i18next` (circa 40 kB e un contesto da propagare ovunque, anche alle etichette definite fuori dai componenti). Chiavi semantiche (`nav.dashboard`): andrebbero inventati e mantenuti 1.500 nomi, e un testo non ancora tradotto non sarebbe leggibile.
 **Limite noto.** Eventi e messaggi delle integrazioni arrivano dal server già in italiano, e lo restano finché non si converte l’API: gli eventi andranno salvati come chiave più variabili, non come testo.
 **Da rivedere se** si aggiungono altre lingue (servirà un dizionario anche per l’italiano e un fallback per lingua) o traduzioni dalla comunità (formato standard come JSON di i18next o PO).
+
+## D-036 — Dispositivi fidati per la verifica in due passaggi (2026-10-16)
+
+**Contesto.** Richiesta dell’utente: non chiedere il codice 2FA a ogni accesso dallo stesso browser, con un periodo scelto in giorni.
+**Scelta.**
+- Dopo il codice, al login compare «Ricorda questo dispositivo per N giorni» (non spuntato di default). Se spuntato, GIGI OS salva un cookie `gigi_trust` casuale (32 byte), `HttpOnly`, `SameSite=Strict`, `Secure` come quello di sessione, limitato a `/api/v1/auth` e con durata pari al periodo. Nel database (`trusted_devices`, migrazione 007) c’è solo l’hash SHA-256, con etichetta del browser, IP e scadenza. Massimo 20 dispositivi per utente: oltre, si toglie il più vecchio.
+- Il cookie salta **solo** il codice: la password resta sempre obbligatoria e vale soltanto per l’utente che l’ha creato.
+- Periodo unico per tutti, scelto dall’amministratore in Sicurezza → Il mio account: 0 (disattivati), 1, 7, 14, 30 (predefinito), 60 o 90 giorni. Accorciarlo accorcia anche i dispositivi già ricordati; 0 li elimina.
+- I dispositivi si cancellano: uno o tutti dall’utente; tutti al cambio password, al reset della password o alla disattivazione dell’utente da parte di un admin, a disattivazione/ricollegamento della 2FA e con `reset-mfa.js`. Ogni azione finisce nell’audit log.
+**Alternative scartate.** Prolungare la sessione (un furto del cookie di sessione darebbe accesso senza password). Periodo scelto dal singolo utente (un operatore potrebbe aggirare la politica dell’amministratore). Riconoscere il dispositivo da IP o user agent (facili da falsificare e instabili).
+**Conseguenze.** Chi ottiene il cookie `gigi_trust` e la password entra senza codice fino alla scadenza: per questo il cookie non è leggibile da JavaScript e si può revocare.
+**Da rivedere se** servono periodi diversi per ruolo, o WebAuthn/passkey (che renderebbe il dispositivo fidato superfluo).

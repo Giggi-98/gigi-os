@@ -17,6 +17,7 @@ if (!u) {
 }
 const had = db.prepare('DELETE FROM user_mfa WHERE user_id = ?').run(u.id).changes > 0;
 db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+db.prepare('DELETE FROM trusted_devices WHERE user_id = ?').run(u.id);
 db.prepare('INSERT INTO audit_log (ts, user_id, username, action, target, result, ip, details) VALUES (?, NULL, ?, ?, ?, ?, NULL, ?)').run(
   Date.now(),
   'console del server',
