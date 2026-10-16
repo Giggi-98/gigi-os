@@ -38,6 +38,8 @@ export const integrationInput = z.object({
 });
 export type IntegrationInput = z.infer<typeof integrationInput>;
 
+const isLoopbackUrl = (h: string) => h === 'localhost' || h.startsWith('127.') || h === '::1' || h === '[::1]';
+
 export class Integrations {
   private cache = new Map<string, { t: number; data: unknown }>();
 
@@ -46,7 +48,22 @@ export class Integrations {
     private vault: Vault,
     private allowed: BlockList,
     private events: Events,
+    /** IP o nome su cui ascolta GIGI OS: sostituisce 127.0.0.1 negli indirizzi web delle app che rispondono anche in LAN. */
+    private publicHost: string | null = null,
   ) {}
+
+  /** Indirizzo da aprire nel browser per un URL di servizio: 127.0.0.1 → IP di GIGI OS se il connettore lo consente. */
+  lanUrl(type: string, url: string): string | null {
+    if (!connectors[type]?.webOnLan || !this.publicHost || isLoopbackUrl(this.publicHost)) return null;
+    try {
+      const u = new URL(url);
+      if (!isLoopbackUrl(u.hostname)) return null;
+      u.hostname = this.publicHost;
+      return u.toString().replace(/\/$/, '');
+    } catch {
+      return null;
+    }
+  }
 
   private rows(): Row[] {
     return this.db.prepare('SELECT * FROM integrations ORDER BY created_at').all() as Row[];
@@ -76,7 +93,7 @@ export class Integrations {
       typeLabel: def?.label ?? r.type,
       name: r.name,
       baseUrl: r.base_url,
-      webUrl: cfg.webUrl || def?.defaultWebUrl || r.base_url,
+      webUrl: cfg.webUrl || this.lanUrl(r.type, r.base_url) || r.base_url,
       auth: r.auth_type,
       secretFields: secretKeys,
       config: cfg,

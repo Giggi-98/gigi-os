@@ -34,8 +34,12 @@ const SEG_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 // Percorsi dell'host che un compose non dovrebbe montare senza un motivo preciso.
-const OWN_STATE = ['/opt/gigi-os'];
-const OTHER_SERVICES = ['/opt/docker', '/opt/homeassistant', '/home/gigi/armony'];
+/** Cartella di installazione di GIGI OS: dall'etichetta compose del container gigi-agent, altrimenti /opt/gigi-os. */
+const DEFAULT_OWN_STATE = '/opt/gigi-os';
+/** Cartelle extra da proteggere (oltre a quelle degli stack esistenti, ricavate dai container), separate da virgole. */
+const EXTRA_PROTECTED = (process.env.GIGI_PROTECTED_PATHS ?? '').split(',').map((s) => s.trim()).filter((s) => s.startsWith('/'));
+/** Radice dei media e dei download: montarla in scrittura è normale per i servizi multimediali, ma va segnalato. */
+const MEDIA_ROOT = process.env.GIGI_MEDIA_ROOT || '/srv';
 const SYSTEM_PATHS = ['/', '/etc', '/root', '/boot', '/usr', '/var', '/proc', '/sys', '/dev', '/home', '/opt', '/run', '/lib', '/bin', '/sbin'];
 const DOCKER_SOCKETS = ['/var/run/docker.sock', '/run/docker.sock'];
 const DANGEROUS_CAPS = new Set(['ALL', 'SYS_ADMIN', 'SYS_MODULE', 'SYS_PTRACE', 'SYS_RAWIO', 'NET_ADMIN', 'DAC_READ_SEARCH', 'SYS_BOOT']);
@@ -345,6 +349,18 @@ export async function preflight(input: PreflightInput) {
       for (const p of c.Ports ?? []) if (p.PublicPort) own.add(`${p.Type}/${p.PublicPort}`);
     }
     const usedNames = new Map(containers.map((c) => [(c.Names[0] ?? '').replace(/^\//, ''), c.Labels?.['com.docker.compose.project'] ?? null]));
+    const ownDir = containers.find((c) => (c.Names[0] ?? '') === '/gigi-agent')?.Labels?.['com.docker.compose.project.working_dir'];
+    const OWN_STATE = [...new Set([ownDir ?? DEFAULT_OWN_STATE, DEFAULT_OWN_STATE])];
+    // Cartelle degli altri stack compose (etichetta working_dir) fuori dalle radici di GIGI OS: montarle è un rischio
+    const otherServices = [
+      ...new Set([
+        ...containers
+          .filter((c) => c.Labels?.['com.docker.compose.project'] !== input.project)
+          .map((c) => c.Labels?.['com.docker.compose.project.working_dir'])
+          .filter((d): d is string => !!d && !ROOTS.some((r) => under(d, r.path)) && !OWN_STATE.some((o) => under(d, o))),
+        ...EXTRA_PROTECTED,
+      ]),
+    ];
     const claimed = new Set<string>();
 
     for (const [name, s] of svcs) {
@@ -378,10 +394,10 @@ export async function preflight(input: PreflightInput) {
         if (under(src, dir)) continue;
         if (DOCKER_SOCKETS.includes(src)) w('danger', `Monta il socket Docker (${src}): equivale ad accesso root all’host`);
         else if (OWN_STATE.some((p) => under(src, p))) w('error', `Non è consentito montare lo stato di GIGI OS (${src})`);
-        else if (OTHER_SERVICES.some((p) => under(src, p))) w('danger', `Monta la cartella di un altro servizio (${src})${ro ? '' : ' in scrittura'}`);
+        else if (otherServices.some((p) => under(src, p))) w('danger', `Monta la cartella di un altro servizio (${src})${ro ? '' : ' in scrittura'}`);
         else if (SYSTEM_PATHS.some((p) => src === p) || ['/etc', '/root', '/boot', '/proc', '/sys', '/dev'].some((p) => under(src, p)))
           w(ro ? 'warn' : 'danger', `Monta una cartella di sistema (${src})${ro ? ' in sola lettura' : ' in scrittura'}`);
-        else if (under(src, '/srv') && !ro) w('warn', `Scrittura su ${src} (media/download): verifica che sia voluto`);
+        else if (under(src, MEDIA_ROOT) && !ro) w('warn', `Scrittura su ${src} (media/download): verifica che sia voluto`);
         else w('info', `Cartella dell’host ${src}${ro ? ' (sola lettura)' : ''}: se non esiste Docker la crea con proprietario root`);
       }
 
@@ -392,7 +408,7 @@ export async function preflight(input: PreflightInput) {
         ports.push(`${ip ? `${ip}:` : ''}${p.published ?? '(casuale)'}→${p.target}/${proto}`);
         if (!p.published) continue;
         if (!ip || ip === '0.0.0.0' || ip === '::')
-          w('warn', `Porta ${p.published}/${proto} su tutte le interfacce: le porte pubblicate da Docker scavalcano UFW (usa 192.168.222.200:${p.published}:… per la sola LAN)`);
+          w('warn', `Porta ${p.published}/${proto} su tutte le interfacce: le porte pubblicate da Docker scavalcano UFW (usa ${process.env.GIGI_BIND || 'l’IP LAN'}:${p.published}:… per la sola LAN)`);
         for (const port of expandPorts(p.published)) {
           const key = `${proto}/${port}`;
           if (claimed.has(key)) w('error', `Porta ${port}/${proto} dichiarata due volte nello stack`);

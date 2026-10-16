@@ -30,7 +30,12 @@ services:
     environment:
       GIGI_AGENT_SOCKET: /run/gigi/agent.sock
       # Radici dove il wizard può creare stack (D-025); montate qui sotto con lo STESSO percorso
-      GIGI_STACK_ROOTS: Stack=/opt/stacks
+      GIGI_STACK_ROOTS: Stack=${GIGI_STACKS_ROOT:-/opt/stacks}
+      # Per i messaggi del wizard (es. «pubblica la porta come IP:porta») e per riconoscere le cartelle dei media
+      GIGI_BIND: ${GIGI_BIND:?Imposta GIGI_BIND (IP LAN del server) nel file .env}
+      GIGI_MEDIA_ROOT: ${GIGI_MEDIA_ROOT:-/srv}
+      # Cartelle extra da non far montare agli stack senza conferma (quelle degli stack esistenti si ricavano da sole)
+      GIGI_PROTECTED_PATHS: ${GIGI_PROTECTED_PATHS:-}
       GIGI_COMPOSE_BIN: /usr/local/bin/docker-compose
       GIGI_OS_RELEASE: /host/os-release
       GIGI_HOSTNAME_FILE: /host/hostname
@@ -54,8 +59,8 @@ services:
       - /var/lib/update-notifier:/host/update-notifier:ro
       - /var/lib/apt/periodic:/host/apt-periodic:ro
       - /boot:/host/boot:ro
-      # Stack creati dal wizard: stesso percorso dell'host, così ./data nel compose diventa /opt/stacks/<nome>/data
-      - /opt/stacks:/opt/stacks
+      # Stack creati dal wizard: stesso percorso dell'host, così ./data nel compose diventa <radice>/<nome>/data
+      - ${GIGI_STACKS_ROOT:-/opt/stacks}:${GIGI_STACKS_ROOT:-/opt/stacks}
 
   api:
     <<: *hardening
@@ -69,7 +74,7 @@ services:
     mem_limit: 256m
     cpus: 1.0
     environment:
-      GIGI_BIND: ${GIGI_BIND:-192.168.222.200}
+      GIGI_BIND: ${GIGI_BIND:?Imposta GIGI_BIND (IP LAN del server) nel file .env}
       GIGI_PORT: ${GIGI_PORT:-8470}
       GIGI_DATA_DIR: /data
       GIGI_WEB_DIR: /app/apps/web/dist
@@ -78,7 +83,9 @@ services:
       GIGI_TLS_CERT: /secrets/tls.crt
       GIGI_TLS_KEY: /secrets/tls.key
       NODE_EXTRA_CA_CERTS: /secrets/tls.crt
-      GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-127.0.0.0/8,::1/128,192.168.222.0/24}
+      # Vuoto = 127.0.0.1 più la rete LAN dell'IP in GIGI_BIND (ricavata dall'interfaccia)
+      GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-}
+      GIGI_STACK_ROOTS: Stack=${GIGI_STACKS_ROOT:-/opt/stacks}
       GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
       GIGI_MEDIA_SCAN_MS: ${GIGI_MEDIA_SCAN_MS:-120000}
       GIGI_METRICS_DAYS: ${GIGI_METRICS_DAYS:-30}
@@ -97,12 +104,7 @@ services:
       - ./compose.yaml:/backup-src/compose.yaml:ro
       # DNS reali dell'host (systemd-resolved) per la pagina Rete, in sola lettura
       - /run/systemd/resolve:/host/resolve:ro
-      # Configurazioni di altri servizi per il backup, in sola lettura e limitate alle sottocartelle necessarie
-      - /opt/docker/qbittorrent/config/qBittorrent:/backup-src/qbittorrent:ro
-      - /opt/docker/jellyfin/config/config:/backup-src/jellyfin/config:ro
-      - /opt/docker/jellyfin/config/root:/backup-src/jellyfin/root:ro
-      - /opt/docker/jellyfin/config/plugins/configurations:/backup-src/jellyfin/plugins/configurations:ro
-      - /opt/docker/jellyfin/config/data:/backup-src/jellyfin/data:ro
+      # Le configurazioni di qBittorrent e Jellyfin da includere nei backup dipendono dall'host: vedi compose.override.example.yaml
       - gigi-run:/run/gigi
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('https://'+process.env.GIGI_BIND+':'+process.env.GIGI_PORT+'/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -125,12 +127,13 @@ services:
     environment:
       GIGI_MEDIA_SOCKET: /run/gigi/media.sock
       GIGI_DATA_DIR: /data
-      # Librerie Jellyfin esistenti (verificate il 2026-10-15): non viene creata alcuna nuova tassonomia
-      GIGI_MEDIA_LIBRARIES: movies=/srv/media/Film,series=/srv/media/SerieTV,animeMovies=/srv/media/Anime/Film,animeSeries=/srv/media/Anime/Serie
+      # Cartelle delle librerie Jellyfin esistenti (da impostare nel .env con i percorsi reali): GIGI OS non crea una sua tassonomia
+      GIGI_MEDIA_LIBRARIES: ${GIGI_MEDIA_LIBRARIES:-movies=${GIGI_MEDIA_ROOT:-/srv}/media/Movies,series=${GIGI_MEDIA_ROOT:-/srv}/media/TV,animeMovies=${GIGI_MEDIA_ROOT:-/srv}/media/Anime/Movies,animeSeries=${GIGI_MEDIA_ROOT:-/srv}/media/Anime/TV}
     volumes:
-      # /srv come UNICO mount: gli hardlink tra downloads e media funzionano solo nello stesso mount.
-      # Il codice non elimina, non sposta e non sovrascrive mai file (vedi DECISIONS D-011).
-      - /srv:/srv
+      # Radice di download e media come UNICO mount, con lo stesso percorso dell'host: gli hardlink funzionano solo nello
+      # stesso mount e i percorsi letti da qBittorrent/Jellyfin restano validi. Il codice non elimina, non sposta e non
+      # sovrascrive mai file (vedi DECISIONS D-011).
+      - ${GIGI_MEDIA_ROOT:-/srv}:${GIGI_MEDIA_ROOT:-/srv}
       - ./data/media:/data
       - gigi-run:/run/gigi
 
@@ -145,12 +148,12 @@ services:
     cpus: 0.5
     environment:
       GIGI_FILES_SOCKET: /run/gigi/files.sock
-      GIGI_FILES_ROOTS: Download=/srv/downloads,Media=/srv/media
+      GIGI_FILES_ROOTS: ${GIGI_FILES_ROOTS:-Media=${GIGI_MEDIA_ROOT:-/srv}}
       GIGI_PASSWD_FILE: /host/passwd
     volumes:
-      # /srv intero per consentire spostamenti e hardlink tra Download e Media (stesso mount);
+      # La radice intera per consentire spostamenti e hardlink tra le cartelle (stesso mount);
       # l'accesso è comunque confinato alle radici in GIGI_FILES_ROOTS.
-      - /srv:/srv
+      - ${GIGI_MEDIA_ROOT:-/srv}:${GIGI_MEDIA_ROOT:-/srv}
       - /etc/passwd:/host/passwd:ro
       - gigi-run:/run/gigi
 

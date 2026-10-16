@@ -8,4 +8,5 @@ export const connectors: Record<string, ConnectorDef> = Object.fromEntries(
 );
 
 /** Integrazioni senza credenziali create automaticamente al primo setup. */
-export const AUTO_SEED = ['apollo', 'armony', 'navidrome'];
+// Nessuna integrazione creata da sola: ogni installazione aggiunge quelle che ha (Armony e Apollo sono app specifiche).
+export const AUTO_SEED: string[] = [];

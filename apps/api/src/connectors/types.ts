@@ -39,7 +39,11 @@ export type ConnectorDef = {
   /** container Docker associato di default, per collegare stato container e integrazione */
   defaultContainer?: string;
   /** URL da aprire nel browser, se diverso dal base URL interno */
-  defaultWebUrl?: string;
+  /**
+   * L'interfaccia web risponde anche sull'IP LAN: se l'indirizzo configurato è locale (127.0.0.1), nel launcher e nei
+   * collegamenti si usa lo stesso indirizzo con l'IP su cui ascolta GIGI OS.
+   */
+  webOnLan?: boolean;
   auth: AuthMethod[];
   configFields?: ConfigField[];
   capabilities: string[];

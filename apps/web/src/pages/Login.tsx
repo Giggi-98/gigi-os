@@ -111,7 +111,7 @@ export function Login({ setup }: { setup: boolean }) {
         <div className="mb-7 flex flex-col items-center text-center">
           <img src="/favicon.svg" alt="" className="mb-4 size-12" />
           <h1 className="text-xl font-semibold tracking-tight">{setup ? 'Configura GIGI OS' : 'Accedi a GIGI OS'}</h1>
-          <p className="mt-1 text-sm text-muted">{setup ? 'Crea il primo account amministratore.' : 'Homelab control center · Gigi-Mini-Pc'}</p>
+          <p className="mt-1 text-sm text-muted">{setup ? 'Crea il primo account amministratore.' : 'Homelab control center'}</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow)' }}>
           {setup && (

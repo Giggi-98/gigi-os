@@ -154,7 +154,7 @@ export const qbittorrent: ConnectorDef = {
   type: 'qbittorrent',
   label: 'qBittorrent',
   description: 'Client torrent: download, ricerca con i plugin installati, aggiunta, gestione e seeding.',
-  defaultUrl: 'http://192.168.222.200:8085',
+  defaultUrl: 'http://127.0.0.1:8080',
   defaultName: 'qBittorrent',
   defaultContainer: 'qbittorrent',
   auth: [

@@ -1,0 +1,12 @@
+# Esempio: copia in compose.override.yaml e adatta i percorsi. «docker compose» lo carica in automatico insieme a compose.yaml.
+# Serve solo se vuoi includere nei backup di GIGI OS le configurazioni di qBittorrent e Jellyfin (sola lettura).
+services:
+  api:
+    volumes:
+      # qBittorrent (immagine linuxserver): la cartella che contiene qBittorrent.conf
+      - /percorso/qbittorrent/config/qBittorrent:/backup-src/qbittorrent:ro
+      # Jellyfin: sottocartelle della sua cartella di configurazione
+      - /percorso/jellyfin/config/config:/backup-src/jellyfin/config:ro
+      - /percorso/jellyfin/config/root:/backup-src/jellyfin/root:ro
+      - /percorso/jellyfin/config/plugins/configurations:/backup-src/jellyfin/plugins/configurations:ro
+      - /percorso/jellyfin/config/data:/backup-src/jellyfin/data:ro

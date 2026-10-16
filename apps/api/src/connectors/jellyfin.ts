@@ -31,7 +31,7 @@ export const jellyfin: ConnectorDef = {
   label: 'Jellyfin',
   description: 'Server multimediale: librerie, ultimi contenuti, scansioni, sessioni attive.',
   defaultUrl: 'http://127.0.0.1:8096',
-  defaultWebUrl: 'http://192.168.222.200:8096',
+  webOnLan: true,
   defaultName: 'Jellyfin',
   defaultContainer: 'jellyfin',
   auth: [

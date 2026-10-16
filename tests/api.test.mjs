@@ -78,9 +78,17 @@ test('setup: richiede il codice monouso', async () => {
   assert.equal(again.statusCode, 409);
 });
 
-test('setup crea integrazioni senza credenziali (Apollo, Armony, Navidrome)', async () => {
+test('setup: nessuna integrazione creata da sola (ognuno aggiunge le sue app)', async () => {
   const r = await app.inject({ method: 'GET', url: '/api/v1/integrations', headers: { cookie: adminCookie } });
-  assert.deepEqual(r.json().map((i) => i.type).sort(), ['apollo', 'armony', 'navidrome']);
+  assert.deepEqual(r.json(), []);
+  // Armony (connettore opzionale) aggiunta a mano, senza chiave: serve ai test successivi
+  const a = await app.inject({
+    method: 'POST',
+    url: '/api/v1/integrations',
+    headers: { cookie: adminCookie, 'x-csrf-token': adminCsrf },
+    payload: { type: 'armony', name: 'Armony', baseUrl: 'http://127.0.0.1:9', auth: 'none' },
+  });
+  assert.equal(a.statusCode, 200, a.body);
 });
 
 test('API protette senza sessione → 401', async () => {

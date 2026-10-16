@@ -25,7 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { CommandPalette, usePaletteShortcut } from './CommandPalette';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ROLE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -33,7 +33,8 @@ import { useOverview } from '../lib/queries';
 import { useTheme } from '../lib/theme';
 import { Badge, Button, cx, Dot } from './ui';
 
-type Item = { to: string; label: string; icon: ReactNode; soon?: boolean };
+/** `requires`: la voce compare solo se esiste un'integrazione di quel tipo (es. app specifiche come Armony). */
+type Item = { to: string; label: string; icon: ReactNode; soon?: boolean; requires?: string };
 export const NAV: { group: string; items: Item[] }[] = [
   {
     group: 'Panoramica',
@@ -58,7 +59,7 @@ export const NAV: { group: string; items: Item[] }[] = [
       { to: '/media', label: 'Media', icon: <Clapperboard /> },
       { to: '/download', label: 'Download', icon: <Download /> },
       { to: '/media-automation', label: 'Media automation', icon: <Wand2 /> },
-      { to: '/armony', label: 'Armony', icon: <Music2 /> },
+      { to: '/armony', label: 'Armony', icon: <Music2 />, requires: 'armony' },
     ],
   },
   {
@@ -71,7 +72,6 @@ export const NAV: { group: string; items: Item[] }[] = [
     ],
   },
 ];
-const PAGES = NAV.flatMap((g) => g.items.map((i) => ({ to: i.to, label: i.label, icon: i.icon, group: g.group })));
 
 function readCollapsed() {
   try {
@@ -91,6 +91,12 @@ export function Layout() {
   usePaletteShortcut(openPalette);
   const loc = useLocation();
   const overview = useOverview();
+  const typeKey = [...new Set((overview.data?.integrations ?? []).map((i) => i.type))].sort().join(',');
+  const { nav, pages } = useMemo(() => {
+    const types = new Set(typeKey.split(','));
+    const nav = NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.requires || types.has(i.requires)) })).filter((g) => g.items.length);
+    return { nav, pages: nav.flatMap((g) => g.items.map((i) => ({ to: i.to, label: i.label, icon: i.icon, group: g.group }))) };
+  }, [typeKey]);
 
   useEffect(() => setMobileOpen(false), [loc.pathname]);
   useEffect(() => {
@@ -123,7 +129,7 @@ export function Layout() {
         )}
       </div>
       <div className="flex-1 space-y-4 overflow-y-auto px-2.5 py-2">
-        {NAV.map((g) => (
+        {nav.map((g) => (
           <div key={g.group}>
             {(!collapsed || mobile) && <div className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted uppercase">{g.group}</div>}
             <ul className="space-y-0.5">
@@ -187,7 +193,7 @@ export function Layout() {
           </Button>
           <div className="flex min-w-0 items-center gap-2 text-[13px]">
             <Dot tone={hostTone} pulse={hostTone === 'ok'} />
-            <span className="truncate font-medium">{sys?.hostname ?? 'Gigi-Mini-Pc'}</span>
+            <span className="truncate font-medium">{sys?.hostname ?? 'GIGI OS'}</span>
             {sys && (
               <span className="hidden truncate text-muted sm:inline">
                 · {sys.os} · <Activity className="inline size-3.5 align-[-2px]" /> {Math.round(sys.cpu.usage)}% CPU
@@ -214,7 +220,7 @@ export function Layout() {
             </Button>
           </div>
         </header>
-        {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} pages={PAGES} />}
+        {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} pages={pages} />}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] md:px-6">
           <div className="mx-auto max-w-[1600px]">
             <Outlet />

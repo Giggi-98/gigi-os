@@ -230,3 +230,16 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Alternative scartate.** Watchtower o Diun (un altro container con il socket Docker, e Watchtower aggiorna da solo). Pull periodico delle immagini (scarica gigabyte per sapere se c’è una novità). `apt list --upgradable` nel container (servirebbe apt e un accesso più ampio all’host).
 **Limiti noti.** Il conteggio dei pacchetti è quello di update-notifier: se apt non aggiorna gli indici è vecchio, e la pagina mostra la data. `/run/reboot-required` non è letto: il riavvio è segnalato solo per il kernel. Docker Hub restituisce i 100 tag aggiornati più di recente: per repository con moltissime varianti una versione potrebbe sfuggire.
 **Da rivedere se** si vuole l’aggiornamento con un clic per stack autorizzati esplicitamente, o la lettura di `/run/reboot-required`.
+
+## D-033 — Nessun valore di un singolo server nel codice (2026-10-16)
+
+**Contesto.** Primo passo per la repo pubblica (fase A): IP `192.168.222.200`, rete `192.168.222.0/24`, nome dell’host, cartelle `/opt/docker/...`, `/home/gigi/armony`, `/srv` e librerie `Film/SerieTV/Anime` erano scritti in codice, `compose.yaml` e script.
+**Scelta.**
+- `GIGI_BIND` è obbligatoria in compose (errore esplicito se manca). Se `GIGI_ALLOWED_TARGETS` è vuota, l’API usa 127.0.0.1 più la rete dell’interfaccia che ha quell’IP (`lanOf`).
+- Gli indirizzi web delle app non sono più fissi: i connettori dichiarano `webOnLan` e un URL di servizio `127.0.0.1` diventa lo stesso URL con l’IP di GIGI OS. Navidrome no: di norma ascolta solo in locale.
+- Nessuna integrazione creata da sola al primo setup (prima Apollo, Armony e Navidrome). La voce Armony del menu compare solo se l’integrazione esiste.
+- Le cartelle degli altri servizi che un nuovo stack non dovrebbe montare si ricavano dalle etichette `working_dir` dei container compose esistenti (più `GIGI_PROTECTED_PATHS`). La cartella di installazione di GIGI OS viene dall’etichetta del container `gigi-agent`.
+- Cartelle configurabili con lo stesso percorso nei container (`GIGI_MEDIA_ROOT`, `GIGI_STACKS_ROOT`), più `GIGI_MEDIA_LIBRARIES` e `GIGI_FILES_ROOTS`. I mount dei backup di qBittorrent e Jellyfin passano in `compose.override.yaml`, specifico dell’host.
+- Senza journal, systemd o apt le sezioni restituiscono «non disponibile» invece di un errore (provato con l’immagine dell’agent senza mount).
+**Conseguenze per questo server.** Nessuna: i valori sono stati spostati in `.env` e `compose.override.yaml`. La configurazione risolta da `docker compose config` è identica a prima, salvo quattro variabili d’ambiente aggiunte.
+**Da rivedere se** l’installer (fase B) genera `.env` e override da solo, o se le librerie si ricavano direttamente da Jellyfin.

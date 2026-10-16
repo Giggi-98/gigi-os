@@ -11,7 +11,8 @@ const SOCKET = process.env.GIGI_MEDIA_SOCKET ?? '/run/gigi/media.sock';
 const DATA = process.env.GIGI_DATA_DIR ?? path.resolve('data/media');
 
 function parseLibraries(): Libraries {
-  const def = 'movies=/srv/media/Film,series=/srv/media/SerieTV,animeMovies=/srv/media/Anime/Film,animeSeries=/srv/media/Anime/Serie';
+  // Predefinito generico: ogni installazione indica in GIGI_MEDIA_LIBRARIES le cartelle reali delle proprie librerie Jellyfin
+  const def = 'movies=/srv/media/Movies,series=/srv/media/TV,animeMovies=/srv/media/Anime/Movies,animeSeries=/srv/media/Anime/TV';
   const out = Object.fromEntries((process.env.GIGI_MEDIA_LIBRARIES ?? def).split(',').map((kv) => kv.split('=').map((s) => s.trim())));
   for (const k of ['movies', 'series', 'animeMovies', 'animeSeries']) if (!out[k]) throw new Error(`Libreria ${k} non configurata`);
   return out as Libraries;

@@ -53,7 +53,7 @@ export const homeassistant: ConnectorDef = {
   label: 'Home Assistant',
   description: 'Domotica: stato del core, versione, numero di entità.',
   defaultUrl: 'http://127.0.0.1:8123',
-  defaultWebUrl: 'http://192.168.222.200:8123',
+  webOnLan: true,
   defaultName: 'Home Assistant',
   defaultContainer: 'homeassistant',
   auth: [
@@ -150,7 +150,7 @@ export const armony: ConnectorDef = {
   label: 'Armony',
   description: 'La tua app musicale. Con la chiave API: dispositivi e brani in riproduzione, stato del server, registro eventi e comandi di riproduzione.',
   defaultUrl: 'http://127.0.0.1:8080',
-  defaultWebUrl: 'http://192.168.222.200:8080',
+  webOnLan: true,
   defaultName: 'Armony',
   defaultContainer: 'armony-app',
   auth: [
@@ -277,7 +277,7 @@ export const apollo: ConnectorDef = {
   label: 'Apollo',
   description: 'Client web per Jellyfin (DPilat-Dev/Apollo). Nessuna API amministrativa: solo health; i contenuti visibili dipendono da Jellyfin.',
   defaultUrl: 'http://127.0.0.1:4173',
-  defaultWebUrl: 'http://192.168.222.200:4173',
+  webOnLan: true,
   defaultName: 'Apollo',
   defaultContainer: 'apollo',
   auth: [{ id: 'none', label: 'Nessuna', fields: [] }],
@@ -294,7 +294,7 @@ export const genericHttp: ConnectorDef = {
   type: 'http',
   label: 'Servizio HTTP generico',
   description: 'Health check di un URL con autenticazione opzionale (Bearer, header API key o Basic).',
-  defaultUrl: 'http://192.168.222.200',
+  defaultUrl: 'http://',
   defaultName: 'Servizio',
   auth: [
     { id: 'none', label: 'Nessuna', fields: [] },

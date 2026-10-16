@@ -450,7 +450,8 @@ function ServicesCard() {
     >
       {q.isError && <div className="px-4"><ErrorBox error={q.error} compact /></div>}
       {!q.data && !q.isError && <div className="px-4"><Skeleton className="h-40" /></div>}
-      {q.data && rows.length === 0 && <Empty title={filter === 'failed' ? 'Nessun servizio in errore' : 'Nessun servizio'} />}
+      {q.data && q.data.length === 0 && <Empty title="Servizi non disponibili">Questo host non usa systemd, oppure le cartelle delle unità non sono montate nell’agent.</Empty>}
+      {q.data && q.data.length > 0 && rows.length === 0 && <Empty title={filter === 'failed' ? 'Nessun servizio in errore' : 'Nessun servizio'} />}
       {q.data && rows.length > 0 && (
         <div className="max-h-[420px] overflow-auto">
           <table className="w-full min-w-[560px] text-left text-[13px]">

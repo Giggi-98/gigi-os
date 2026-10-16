@@ -476,7 +476,7 @@ function AuditTab() {
 
 function Posture() {
   const items = [
-    ['Accesso', 'Solo LAN (192.168.222.0/24), nessuna porta esposta su Internet. HTTPS con certificato locale.'],
+    ['Accesso', 'Pensato per la rete locale o una VPN: nessuna porta esposta su Internet. HTTPS con certificato locale. I connettori raggiungono solo le reti in GIGI_ALLOWED_TARGETS (predefinito: la LAN del server).'],
     ['Autenticazione', 'Password con scrypt, sessioni opache con hash nel DB, cookie HttpOnly + Secure + SameSite=Strict, scadenza per inattività. Verifica in due passaggi TOTP obbligatoria per amministratori e operatori, con codici di recupero monouso.'],
     ['CSRF', 'Token per sessione obbligatorio su ogni modifica + verifica dell’Origin.'],
     ['Brute force', 'Blocco persistente per IP e per utente dopo tentativi falliti; rate limit globale.'],

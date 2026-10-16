@@ -238,7 +238,14 @@ export class Network {
   private speed: Speed | null = null;
   private scanning = false;
 
-  constructor(private db: DB, private dataDir: string, private agent: AgentClient, private events: Events) {}
+  constructor(
+    private db: DB,
+    private dataDir: string,
+    private agent: AgentClient,
+    private events: Events,
+    /** IP su cui ascolta GIGI OS, usato negli esempi dei messaggi. */
+    private bindHost = 'IP_LAN',
+  ) {}
 
   blocked(hours: number) {
     return this.agent.json('GET', `/v1/firewall/blocked?hours=${hours}`, 30_000);
@@ -466,7 +473,7 @@ export class Network {
     const [snapshot, listening] = await Promise.all([this.ufwSnapshot(), this.listening()]);
     const findings: { level: 'warn' | 'info' | 'ok'; message: string }[] = [];
     for (const l of listening.items.filter((i) => i.bypassUfw))
-      findings.push({ level: 'warn', message: `Porta ${l.port}/${l.proto} (${l.service}) pubblicata da Docker su tutte le interfacce: UFW non la filtra. Per la sola LAN pubblicala come 192.168.222.200:${l.port}:…` });
+      findings.push({ level: 'warn', message: `Porta ${l.port}/${l.proto} (${l.service}) pubblicata da Docker su tutte le interfacce: UFW non la filtra. Per la sola LAN pubblicala come ${this.bindHost}:${l.port}:…` });
     if (snapshot) {
       if (Date.now() - snapshot.updatedAt > 20 * 60_000) findings.push({ level: 'warn', message: 'L’istantanea delle regole è vecchia di oltre 20 minuti: il timer gigi-ufw-snapshot potrebbe essere fermo' });
       if (snapshot.status !== 'active') findings.push({ level: 'warn', message: 'UFW non è attivo: tutte le porte in ascolto sono raggiungibili' });

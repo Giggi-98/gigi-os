@@ -316,6 +316,8 @@ type Firewall = {
 type Blocked = {
   hours: number;
   total: number;
+  /** Motivo, se il journal del kernel non è leggibile su questo host. */
+  unavailable?: string | null;
   truncated: boolean;
   sources: { src: string; count: number; ports: string[]; last: number; iface: string }[];
   ports: { port: string; count: number; sources: number }[];
@@ -416,6 +418,8 @@ function FirewallTab() {
           <ErrorBox error={b.error} compact />
         ) : !b.data ? (
           <Skeleton className="h-40 w-full" />
+        ) : b.data.unavailable ? (
+          <p className="text-xs text-muted">Non disponibile su questo host: il journal del kernel non è leggibile (serve systemd con journal persistente).</p>
         ) : b.data.total === 0 ? (
           <p className="text-xs text-muted">Nessun pacchetto bloccato nel periodo (o log di UFW disattivato).</p>
         ) : (
@@ -569,7 +573,7 @@ function TestsTab() {
           </div>
           <div className="min-w-52 flex-1">
             <Field label={type === 'http' ? 'URL' : type === 'dns' ? 'Nome o IP' : 'Host o IP'}>{(id) => (
-              <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder={type === 'http' ? 'https://…' : type === 'dns' ? 'example.com' : '192.168.222.254'} autoComplete="off" spellCheck={false} />
+              <Input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder={type === 'http' ? 'https://…' : type === 'dns' ? 'example.com' : '192.168.1.1'} autoComplete="off" spellCheck={false} />
             )}</Field>
           </div>
           {type === 'tcp' && (

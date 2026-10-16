@@ -177,7 +177,7 @@ function EditDialog({ app, groups, onClose }: { app: LauncherApp | null; groups:
     >
       <div className="space-y-3">
         <Field label="Nome">{(id) => <Input id={id} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={60} autoFocus />}</Field>
-        <Field label="Indirizzo" help="Quello che apri dal browser, per esempio http://192.168.222.200:8096">
+        <Field label="Indirizzo" help={`Quello che apri dal browser, per esempio http://${window.location.hostname}:8096`}>
           {(id) => <Input id={id} value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} inputMode="url" spellCheck={false} />}
         </Field>
         <Field label="Gruppo" help="Facoltativo: Media, Casa, Server…">

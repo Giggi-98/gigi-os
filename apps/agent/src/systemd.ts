@@ -216,7 +216,13 @@ export async function systemErrors(hours: number) {
  */
 export async function firewallBlocked(hours: number) {
   const h = Math.min(Math.max(Math.round(hours), 1), 168);
-  const out = await journalctl(['-k', `--since=-${h}h`, '--grep', 'UFW BLOCK', '-r', '-n', '20000', '-q', '-o', 'json', '--output-fields=MESSAGE'], 64 * 1024 * 1024);
+  let out: string;
+  try {
+    out = await journalctl(['-k', `--since=-${h}h`, '--grep', 'UFW BLOCK', '-r', '-n', '20000', '-q', '-o', 'json', '--output-fields=MESSAGE'], 64 * 1024 * 1024);
+  } catch (e) {
+    // Host senza journal persistente (o non montato): nessun dato invece di un errore
+    return { hours: h, total: 0, truncated: false, sources: [], ports: [], recent: [], unavailable: (e as Error).message };
+  }
   const field = (msg: string, k: string) => new RegExp(`(?:^|\\s)${k}=(\\S*)`).exec(msg)?.[1] ?? '';
   const bySource = new Map<string, { src: string; count: number; ports: Set<string>; last: number; iface: string }>();
   const byPort = new Map<string, { port: string; count: number; sources: Set<string> }>();
@@ -245,6 +251,7 @@ export async function firewallBlocked(hours: number) {
   return {
     hours: h,
     total,
+    unavailable: null as string | null,
     truncated: total >= 20000,
     sources: [...bySource.values()].sort((a, b) => b.count - a.count).slice(0, 30).map((s) => ({ ...s, ports: [...s.ports].slice(0, 10) })),
     ports: [...byPort.values()].sort((a, b) => b.count - a.count).slice(0, 30).map((p) => ({ port: p.port, count: p.count, sources: p.sources.size })),

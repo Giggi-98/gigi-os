@@ -31,7 +31,7 @@ async function main() {
   const vault = Vault.fromFile(config.masterKeyFile);
   const agent = new AgentClient(config.agentSocket);
   const events = new Events(db);
-  const integrations = new Integrations(db, vault, buildBlockList(config.allowedTargets), events);
+  const integrations = new Integrations(db, vault, buildBlockList(config.allowedTargets), events, config.host);
   const sessions = new Sessions(db, config.sessionIdleHours * 3600_000, config.sessionMaxDays * 86400_000);
   const limiter = new LoginLimiter(db);
   const audit = new Audit(db);
@@ -55,7 +55,7 @@ async function main() {
     },
   ]);
   backups.schedule((m, e) => log('warn', m, e ?? {}));
-  const network = new Network(db, config.dataDir, agent, events);
+  const network = new Network(db, config.dataDir, agent, events, config.host);
   network.startMonitor((m, e) => log('warn', m, e ?? {}));
   const metrics = new Metrics(db, agent, config.metricsDays);
   const launcher = new Launcher(db, buildBlockList(config.allowedTargets), integrations, agent, () => network.listening(), config.host, config.port);

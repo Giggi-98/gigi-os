@@ -6,7 +6,7 @@ import path from 'node:path';
 import { Files, FsError, loadUsers, parseRoots } from './fsops.js';
 
 const SOCKET = process.env.GIGI_FILES_SOCKET ?? '/run/gigi/files.sock';
-const ROOTS = parseRoots(process.env.GIGI_FILES_ROOTS ?? 'Download=/srv/downloads,Media=/srv/media');
+const ROOTS = parseRoots(process.env.GIGI_FILES_ROOTS ?? 'Media=/srv');
 const UPLOAD_MAX = Number(process.env.GIGI_FILES_UPLOAD_MAX ?? 8 * 1024 ** 3);
 const files = new Files(ROOTS);
 const log = (level: string, msg: string, extra: object = {}) => console.log(JSON.stringify({ t: new Date().toISOString(), level, msg, ...extra }));

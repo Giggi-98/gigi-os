@@ -530,7 +530,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       label: c.label,
       description: c.description,
       defaultUrl: c.defaultUrl,
-      defaultWebUrl: c.defaultWebUrl ?? null,
+      defaultWebUrl: c.defaultUrl ? integrations.lanUrl(c.type, c.defaultUrl) : null,
       defaultName: c.defaultName,
       defaultContainer: c.defaultContainer ?? null,
       auth: c.auth,

@@ -322,13 +322,16 @@ function JobOutput({ id, onDone }: { id: string; onDone?: (j: Job) => void }) {
 
 // ───────────── Wizard ─────────────
 
+// Docker accetta solo un IP davanti alla porta: quello della pagina se è un IPv4, altrimenti un segnaposto da sostituire
+const LAN_IP = /^\d{1,3}(\.\d{1,3}){3}$/.test(window.location.hostname) ? window.location.hostname : 'IP_LAN';
+
 const TEMPLATE = `services:
   app:
     image: nginx:alpine
     restart: unless-stopped
     ports:
       # Solo LAN: le porte pubblicate su 0.0.0.0 scavalcano UFW
-      - "192.168.222.200:8081:80"
+      - "${LAN_IP}:8081:80"
     volumes:
       - ./data:/usr/share/nginx/html:ro
 `;
