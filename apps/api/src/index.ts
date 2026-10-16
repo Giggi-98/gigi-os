@@ -9,6 +9,7 @@ import { Events, followDockerEvents } from './events.js';
 import { Integrations } from './integrations.js';
 import { MediaBridge } from './media.js';
 import { Network } from './network.js';
+import { Metrics } from './metrics.js';
 import { Automations, watchDownloads } from './automations.js';
 import { Backups } from './backup.js';
 import { getSetting, setSetting } from './db.js';
@@ -47,6 +48,8 @@ async function main() {
   backups.schedule((m, e) => log('warn', m, e ?? {}));
   const network = new Network(db, config.dataDir, agent, events);
   network.startMonitor((m, e) => log('warn', m, e ?? {}));
+  const metrics = new Metrics(db, agent, config.metricsDays);
+  metrics.start((m, e) => log('warn', m, e ?? {}));
   const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events, new AgentClient(config.filesSocket, 'File manager'));
 
   // Codice di setup monouso: serve solo finché non esiste alcun utente.
@@ -82,6 +85,7 @@ async function main() {
     automations,
     backups,
     network,
+    metrics,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

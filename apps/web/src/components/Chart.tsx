@@ -57,7 +57,11 @@ export function AreaChart({
 
   const ticks = [0, 0.5, 1].map((f) => top * f);
   const timeTicks = n > 1 ? [0, Math.floor((n - 1) / 2), n - 1] : [];
-  const fmtT = (t: number) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const long = n > 1 && times[n - 1] - times[0] > 20 * 3600_000;
+  const fmtT = (t: number) =>
+    long
+      ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
   const onMove = (e: React.PointerEvent) => {
     const r = ref.current?.getBoundingClientRect();

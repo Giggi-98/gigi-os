@@ -77,6 +77,7 @@ services:
       GIGI_ALLOWED_TARGETS: ${GIGI_ALLOWED_TARGETS:-127.0.0.0/8,::1/128,192.168.222.0/24}
       GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
       GIGI_MEDIA_SCAN_MS: ${GIGI_MEDIA_SCAN_MS:-120000}
+      GIGI_METRICS_DAYS: ${GIGI_METRICS_DAYS:-30}
       GIGI_BACKUP_DIR: /backups
       GIGI_BACKUP_EXTRA: env=/backup-src/.env,compose.yaml=/backup-src/compose.yaml
     volumes:

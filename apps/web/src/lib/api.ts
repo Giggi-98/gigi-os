@@ -71,6 +71,24 @@ export type SystemSnapshot = {
 };
 export type Sample = { t: number; cpu: number; mem: number; rx: number; tx: number; load1: number; temp: number | null };
 
+// Storico persistente (D-027): valori null = nessun dato in quel punto (GIGI OS fermo, agent riavviato).
+export type MetricsRange = '1h' | '24h' | '7d' | '30d';
+type Col = (number | null)[];
+export type HostMetrics = { range: MetricsRange; bucketMs: number; since: number | null; times: number[]; cpu: Col; cpuMax: Col; mem: Col; rx: Col; tx: Col; temp: Col };
+export type ContainerMetrics = {
+  range: MetricsRange;
+  metric: 'cpu' | 'mem';
+  bucketMs: number;
+  times: number[];
+  series: { name: string; values: Col }[];
+  ranking: { name: string; cpuAvg: number; cpuPeak: number; memAvg: number; memMax: number; lastSeen: number }[];
+};
+export type DiskForecast =
+  | { status: 'insufficient'; dataDays: number }
+  | { status: 'stable' | 'shrinking'; perDay: number; dataDays: number }
+  | { status: 'growing'; perDay: number; days: number; daysMin: number; daysMax: number | null; dataDays: number };
+export type DiskMetrics = { label: string; points: { t: number; used: number; free: number; total: number }[]; forecast: DiskForecast }[];
+
 export type Container = {
   id: string;
   shortId: string;

@@ -39,7 +39,8 @@ import {
 import { api, type Integration } from '../lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { ago, bytes, duration, eta, pct, rate } from '../lib/format';
-import { byType, useHistory, useOverview, useResource, useSystem } from '../lib/queries';
+import { byType, useDiskMetrics, useHistory, useOverview, useResource, useSystem } from '../lib/queries';
+import { forecastText } from '../pages/System';
 
 type WidgetDef = {
   title: string;
@@ -122,6 +123,7 @@ function MemoryWidget() {
 
 function DiskWidget() {
   const s = useSystem();
+  const m = useDiskMetrics();
   if (s.isError) return <ErrorBox error={s.error} compact />;
   if (!s.data) return <Loading />;
   return (
@@ -139,6 +141,12 @@ function DiskWidget() {
               <span>{bytes(d.used)} usati</span>
               <span>{pct(p)} di {bytes(d.total)}</span>
             </div>
+            {(() => {
+              const f = m.data?.find((x) => x.label === d.label)?.forecast;
+              if (!f || f.status === 'insufficient') return null;
+              const t = forecastText(f);
+              return <div className={cx('mt-0.5 truncate text-[11px]', t.tone === 'err' ? 'text-err' : t.tone === 'warn' ? 'text-warn' : 'text-muted')} title={t.text}>{t.text}</div>;
+            })()}
           </div>
         );
       })}

@@ -15,6 +15,7 @@ import type { MediaBridge } from './media.js';
 import type { Automations } from './automations.js';
 import type { Backups } from './backup.js';
 import type { Network } from './network.js';
+import type { Metrics } from './metrics.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -39,6 +40,7 @@ export type Deps = {
   automations?: Automations;
   backups?: Backups;
   network?: Network;
+  metrics?: Metrics;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

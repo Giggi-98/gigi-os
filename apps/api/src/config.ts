@@ -27,6 +27,8 @@ export const config = {
   sessionMaxDays: Number(env.GIGI_SESSION_MAX_DAYS ?? 7),
   healthIntervalMs: Number(env.GIGI_HEALTH_INTERVAL_MS ?? 60000),
   auditRetentionDays: Number(env.GIGI_AUDIT_RETENTION_DAYS ?? 180),
+  /** Giorni di storico delle metriche (D-027). */
+  metricsDays: Math.min(Math.max(Number(env.GIGI_METRICS_DAYS ?? 30) || 30, 1), 365),
   logLevel: env.GIGI_LOG_LEVEL ?? 'warn',
 };
 

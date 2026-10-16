@@ -32,6 +32,7 @@
   --chart-2: #3ecf8e;
   --chart-3: #4ea8ff;
   --chart-4: #f5b041;
+  --chart-5: #e05a93;
   --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
   color-scheme: dark;
 }
@@ -62,6 +63,7 @@
   --chart-2: #12a46b;
   --chart-3: #1f7ae0;
   --chart-4: #c27c0e;
+  --chart-5: #d6336c;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 8px 24px -16px rgb(16 24 40 / 0.18);
   color-scheme: light;
 }
