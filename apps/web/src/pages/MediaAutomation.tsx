@@ -132,7 +132,7 @@ function shortDest(p: Plan | null) {
 }
 
 export function MediaAutomationPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isOperator } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -174,8 +174,9 @@ export function MediaAutomationPage() {
         title="Media automation"
         description="Download completati → riconoscimento → proposta → importazione con hardlink → Jellyfin e Apollo. La sorgente in seeding non viene mai toccata."
         actions={
-          isAdmin && (
+          isOperator && (
             <>
+              {isAdmin && (
               <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 text-[13px]">
                 <input
                   type="checkbox"
@@ -186,6 +187,7 @@ export function MediaAutomationPage() {
                 />
                 Import automatico ≥ {s?.settings.threshold ?? 85}%
               </label>
+              )}
               <Button size="sm" variant="primary" onClick={() => scan.mutate()} loading={scan.isPending || s?.busy}>
                 <ScanSearch /> Scansiona ora
               </Button>
@@ -342,7 +344,8 @@ export function MediaAutomationPage() {
 }
 
 function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; threshold: number; onClose: () => void; onChanged: () => void }) {
-  const { isAdmin } = useAuth();
+  // Revisione anche agli operatori (D-028); eliminare dalla libreria resta agli admin.
+  const { isAdmin, isOperator } = useAuth();
   const toast = useToast();
   const q = useQuery({ queryKey: ['media-item', id], queryFn: () => api<Item>(`/media/items/${id}`), refetchInterval: 8_000 });
   const [confirm, setConfirm] = useState(false);
@@ -379,8 +382,8 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
   });
 
   const i = q.data;
-  const canImport = isAdmin && i && ['ready', 'review'].includes(i.status) && i.plan;
-  const canEdit = isAdmin && i && !['imported', 'indexed', 'importing'].includes(i.status);
+  const canImport = isOperator && i && ['ready', 'review'].includes(i.status) && i.plan;
+  const canEdit = isOperator && i && !['imported', 'indexed', 'importing'].includes(i.status);
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Dettaglio elemento">
@@ -400,7 +403,7 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
             <X />
           </Button>
         </div>
-        {isAdmin && i && (
+        {isOperator && i && (
           <div className="flex flex-wrap gap-2 border-b border-line px-5 py-3">
             {canImport && (
               <Button size="sm" variant="primary" onClick={() => setConfirm(true)}>
@@ -422,7 +425,7 @@ function ItemDrawer({ id, threshold, onClose, onChanged }: { id: string; thresho
                 <EyeOff /> Ignora
               </Button>
             )}
-            {['imported', 'indexed'].includes(i.status) && (
+            {isAdmin && ['imported', 'indexed'].includes(i.status) && (
               <Button size="sm" variant="ghost" className="text-err" onClick={() => setPurge(true)}>
                 <Trash2 /> Elimina dalla libreria
               </Button>

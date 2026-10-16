@@ -1,8 +1,9 @@
-import { KeyRound, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, KeyRound, Loader2, ShieldCheck, Smartphone } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { api, type User } from '../lib/api';
+import { api, ApiError, type LoginResult, type User } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { Button, ErrorBox, Field, Input } from '../components/ui';
+import { Button, ErrorBox, Field, Input, useToast } from '../components/ui';
+import { CodeInput } from './MfaSetup';
 
 export function Login({ setup }: { setup: boolean }) {
   const { setUser } = useAuth();
@@ -12,6 +13,10 @@ export function Login({ setup }: { setup: boolean }) {
   const [token, setToken] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [ticket, setTicket] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
+  const toast = useToast();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -19,17 +24,86 @@ export function Login({ setup }: { setup: boolean }) {
     if (setup && password !== confirm) return setError(new Error('Le password non coincidono'));
     setBusy(true);
     try {
-      const r = await api<{ user: User }>(setup ? '/auth/setup' : '/auth/login', {
+      const r = await api<LoginResult>(setup ? '/auth/setup' : '/auth/login', {
         method: 'POST',
         body: setup ? { username, password, setupToken: token.trim() } : { username, password },
       });
-      setUser(r.user);
+      if ('mfaRequired' in r) {
+        setTicket(r.ticket);
+        setPassword('');
+      } else setUser(r.user);
     } catch (err) {
       setError(err);
     } finally {
       setBusy(false);
     }
   }
+
+  async function submitCode(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await api<{ user: User; recoveryLeft?: number }>('/auth/login/mfa', { method: 'POST', body: { ticket, code } });
+      if (r.recoveryLeft !== undefined)
+        toast(r.recoveryLeft <= 3 ? 'err' : 'info', `Codice di recupero usato: ne restano ${r.recoveryLeft}. Puoi generarne di nuovi in Sicurezza.`);
+      setUser(r.user);
+    } catch (err) {
+      if (err instanceof ApiError && (err.body as { code?: string })?.code === 'ticket_expired') {
+        setTicket(null);
+        setCode('');
+      }
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (ticket)
+    return (
+      <div className="flex min-h-full items-center justify-center px-4 py-10">
+        <div className="w-full max-w-sm">
+          <div className="mb-7 flex flex-col items-center text-center">
+            <img src="/favicon.svg" alt="" className="mb-4 size-12" />
+            <h1 className="text-xl font-semibold tracking-tight">Verifica in due passaggi</h1>
+            <p className="mt-1 text-sm text-muted">{useRecovery ? 'Inserisci uno dei codici di recupero salvati.' : 'Apri l’app di autenticazione sul telefono.'}</p>
+          </div>
+          <form onSubmit={submitCode} className="space-y-4 rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow)' }}>
+            <Field label={useRecovery ? 'Codice di recupero' : `Codice a 6 cifre per ${username}`}>
+              {(id) => <CodeInput id={id} value={code} onChange={setCode} recovery={useRecovery} />}
+            </Field>
+            {error !== null && <ErrorBox error={error} compact />}
+            <Button type="submit" variant="primary" className="w-full" disabled={busy || (!useRecovery && code.length !== 6)}>
+              {busy ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Verifica
+            </Button>
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-muted hover:text-fg"
+                onClick={() => {
+                  setTicket(null);
+                  setCode('');
+                  setError(null);
+                }}
+              >
+                <ArrowLeft className="size-3.5" /> Indietro
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-accent hover:underline"
+                onClick={() => {
+                  setUseRecovery(!useRecovery);
+                  setCode('');
+                }}
+              >
+                {useRecovery ? <Smartphone className="size-3.5" /> : <KeyRound className="size-3.5" />}
+                {useRecovery ? 'Usa l’app' : 'Usa un codice di recupero'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
 
   return (
     <div className="flex min-h-full items-center justify-center px-4 py-10">

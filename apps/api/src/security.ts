@@ -40,8 +40,12 @@ export function passwordProblems(pw: string, username: string): string | null {
   return null;
 }
 
-export type Role = 'admin' | 'viewer';
-export type SessionUser = { id: string; username: string; role: Role; csrf: string; tokenHash: string };
+export type Role = 'admin' | 'operator' | 'viewer';
+/** Gerarchia dei ruoli (D-028): ogni livello include i permessi di quelli inferiori. */
+export const ROLE_LEVEL: Record<Role, number> = { viewer: 0, operator: 1, admin: 2 };
+export const atLeast = (role: Role, min: Role) => (ROLE_LEVEL[role] ?? -1) >= ROLE_LEVEL[min];
+/** `mfa`: l'utente ha la verifica in due passaggi attiva. */
+export type SessionUser = { id: string; username: string; role: Role; csrf: string; tokenHash: string; mfa: boolean };
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -70,11 +74,11 @@ export class Sessions {
     const th = sha256(token);
     const row = this.db
       .prepare(
-        `SELECT s.token_hash, s.csrf, s.last_seen, s.expires_at, u.id, u.username, u.role, u.disabled
-         FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
+        `SELECT s.token_hash, s.csrf, s.last_seen, s.expires_at, u.id, u.username, u.role, u.disabled, COALESCE(m.enabled, 0) AS mfa
+         FROM sessions s JOIN users u ON u.id = s.user_id LEFT JOIN user_mfa m ON m.user_id = u.id WHERE s.token_hash = ?`,
       )
       .get(th) as
-      | { token_hash: string; csrf: string; last_seen: number; expires_at: number; id: string; username: string; role: Role; disabled: number }
+      | { token_hash: string; csrf: string; last_seen: number; expires_at: number; id: string; username: string; role: Role; disabled: number; mfa: number }
       | undefined;
     if (!row) return null;
     const now = Date.now();
@@ -83,7 +87,7 @@ export class Sessions {
       return null;
     }
     if (now - row.last_seen > 60_000) this.db.prepare('UPDATE sessions SET last_seen = ? WHERE token_hash = ?').run(now, th);
-    return { id: row.id, username: row.username, role: row.role, csrf: row.csrf, tokenHash: th };
+    return { id: row.id, username: row.username, role: row.role, csrf: row.csrf, tokenHash: th, mfa: !!row.mfa };
   }
 
   destroy(tokenHash: string) {

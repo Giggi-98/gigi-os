@@ -160,7 +160,7 @@ export class MediaBridge {
     return items.filter((i) => set.has(i.torrentHash.toLowerCase()) && !['imported', 'indexed', 'ignored'].includes(i.status)).map((i) => i.fileName);
   }
 
-  register(app: FastifyInstance, audit: Audit, viewer: object, admin: object) {
+  register(app: FastifyInstance, audit: Audit, viewer: object, admin: object, operator: object = admin) {
     const m = this.media;
     const who = (req: FastifyRequest) => (req.user as SessionUser).username;
     const badId = (reply: FastifyReply) => reply.code(400).send({ error: 'id non valido' });
@@ -188,7 +188,7 @@ export class MediaBridge {
       return m.json('GET', `/v1/items/${id}`);
     });
 
-    app.post('/api/v1/media/scan', admin, async (req, reply) => {
+    app.post('/api/v1/media/scan', operator, async (req, reply) => {
       const r = await this.scan(who(req));
       if (!r) return reply.code(409).send({ error: 'qBittorrent non è collegato' });
       audit.log(req, 'media.scan', 'ok', null, { rilevati: r.detected, analizzati: r.analyzed, importati: r.imported.length });
@@ -218,10 +218,11 @@ export class MediaBridge {
         throw e;
       }
     };
-    app.post('/api/v1/media/items/:id/import', admin, action('import'));
-    app.post('/api/v1/media/items/:id/ignore', admin, action('ignore'));
-    app.post('/api/v1/media/items/:id/restore', admin, action('restore'));
-    app.post('/api/v1/media/items/:id/reanalyze', admin, action('reanalyze'));
+    // Revisione dei media anche agli operatori (D-028); purge, eliminazioni e impostazioni restano admin.
+    app.post('/api/v1/media/items/:id/import', operator, action('import'));
+    app.post('/api/v1/media/items/:id/ignore', operator, action('ignore'));
+    app.post('/api/v1/media/items/:id/restore', operator, action('restore'));
+    app.post('/api/v1/media/items/:id/reanalyze', operator, action('reanalyze'));
 
     app.post('/api/v1/downloads/purge', admin, async (req, reply) => {
       const b = z.object({ hashes: z.array(z.string().regex(/^[a-f0-9]{40}$|^[a-f0-9]{64}$/)).min(1).max(100), confirm: z.string() }).parse(req.body);
@@ -243,7 +244,7 @@ export class MediaBridge {
       return r;
     });
 
-    app.post('/api/v1/media/items/:id/override', admin, async (req, reply) => {
+    app.post('/api/v1/media/items/:id/override', operator, async (req, reply) => {
       const { id } = req.params as { id: string };
       if (!ID.test(id)) return badId(reply);
       const override = z

@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, setCsrf, setUnauthorizedHandler, type AuthState, type User } from './api';
+import { api, setCsrf, setMfaSetupHandler, setUnauthorizedHandler, type AuthState, type User } from './api';
 
 type Ctx = {
   state: AuthState | null;
   user: User | null;
   isAdmin: boolean;
+  /** Operatore o amministratore: riavvio container, download, revisione media (D-028). */
+  isOperator: boolean;
   refresh: () => Promise<void>;
   setUser: (u: User | null) => void;
   logout: () => Promise<void>;
@@ -34,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       qc.clear();
       setState((s) => (s ? { ...s, user: null } : s));
     });
+    setMfaSetupHandler(() => void refresh());
   }, [refresh, qc]);
 
   const setUser = useCallback((u: User | null) => {
@@ -52,7 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [qc]);
 
   const value = useMemo(
-    () => ({ state, user: state?.user ?? null, isAdmin: state?.user?.role === 'admin', refresh, setUser, logout }),
+    () => ({
+      state,
+      user: state?.user ?? null,
+      isAdmin: state?.user?.role === 'admin',
+      isOperator: state?.user?.role === 'admin' || state?.user?.role === 'operator',
+      refresh,
+      setUser,
+      logout,
+    }),
     [state, refresh, setUser, logout],
   );
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

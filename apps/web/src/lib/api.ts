@@ -11,6 +11,8 @@ export class ApiError extends Error {
 
 let onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
+let onMfaSetupRequired: (() => void) | null = null;
+export const setMfaSetupHandler = (fn: () => void) => (onMfaSetupRequired = fn);
 
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   const method = init.method ?? 'GET';
@@ -38,14 +40,25 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
   }
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/auth/')) onUnauthorized?.();
+    // 2FA azzerata o disattivata mentre la pagina era aperta: si torna alla schermata di configurazione.
+    if (res.status === 403 && (body as { code?: string })?.code === 'mfa_setup_required') onMfaSetupRequired?.();
     throw new ApiError((body as { error?: string })?.error ?? `Errore ${res.status}`, res.status, body);
   }
   return body as T;
 }
 
 // ───────── Tipi condivisi con l'API ─────────
-export type Role = 'admin' | 'viewer';
-export type User = { id: string; username: string; role: Role; csrf: string };
+export type Role = 'admin' | 'operator' | 'viewer';
+export const ROLE_LABEL: Record<Role, string> = { admin: 'Amministratore', operator: 'Operatore', viewer: 'Sola lettura' };
+export type User = {
+  id: string;
+  username: string;
+  role: Role;
+  csrf: string;
+  /** setupRequired: ruolo con 2FA obbligatoria ma non ancora configurata (il backend blocca tutto il resto). */
+  mfa: { enabled: boolean; required: boolean; setupRequired: boolean };
+};
+export type LoginResult = { user: User; recoveryLeft?: number } | { mfaRequired: true; ticket: string };
 export type AuthState = { setupRequired: boolean; user: User | null };
 
 export type SystemSnapshot = {

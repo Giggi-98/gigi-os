@@ -173,7 +173,7 @@ export function ArmonyPage() {
 }
 
 function NowPlaying({ armony }: { armony: Integration }) {
-  const { isAdmin } = useAuth();
+  const { isOperator } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
   const live = useResource<Live>(armony, 'live', '', 5_000);
@@ -221,7 +221,7 @@ function NowPlaying({ armony }: { armony: Integration }) {
                 ) : (
                   <p className="mt-2.5 text-xs text-muted">Niente in riproduzione.</p>
                 )}
-                {isAdmin && s && (
+                {isOperator && s && (
                   <div className="mt-3 flex items-center gap-1">
                     <Button size="icon" variant="ghost" aria-label="Precedente" onClick={() => cmd.mutate({ to: d.device, cmd: 'prev' })}>
                       <SkipBack />

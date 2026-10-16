@@ -12,27 +12,62 @@ import { registerBackups } from './backup.js';
 import { registerStacks } from './stacks.js';
 import { registerNetwork } from './network.js';
 import { registerMetrics } from './metrics.js';
-import { COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
+import { atLeast, COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
+import { MFA_REQUIRED } from './mfa.js';
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const UUID = /^[0-9a-f-]{36}$/;
 
 type Authed = FastifyRequest & { user: SessionUser };
 
+/** Azioni dei connettori consentite agli operatori (D-028); tutto il resto è solo admin. */
+const OPERATOR_ACTIONS: Record<string, ReadonlySet<string>> = {
+  qbittorrent: new Set(['control', 'setCategory', 'shareLimits', 'add', 'searchStart', 'searchResults', 'searchStop', 'delete']),
+  armony: new Set(['command']),
+};
+export function operatorMay(type: string, action: string, body: Record<string, unknown>) {
+  if (!OPERATOR_ACTIONS[type]?.has(action)) return false;
+  // L'operatore rimuove solo il torrent: mai i file scaricati.
+  if (type === 'qbittorrent' && action === 'delete' && body.deleteFiles !== false) return false;
+  return true;
+}
+
 export async function registerRoutes(app: FastifyInstance, d: Deps) {
   const { db, agent, integrations, events, sessions, limiter, audit } = d;
 
+  const { mfa } = d;
+  /** Admin e operatori senza verifica in due passaggi possono solo configurarla (D-029). */
+  const mfaPending = (u: SessionUser) => !!mfa && MFA_REQUIRED.has(u.role) && !u.mfa;
+  const DENIED: Record<Role, string> = {
+    viewer: 'Autenticazione richiesta',
+    operator: 'Permesso riservato a operatori e amministratori',
+    admin: 'Permesso riservato agli amministratori',
+  };
   const auth =
-    (role?: Role) =>
+    (role?: Role, opts: { duringMfaSetup?: boolean } = {}) =>
     async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
       if (!req.user) return void reply.code(401).send({ error: 'Autenticazione richiesta' });
-      if (role === 'admin' && req.user.role !== 'admin') {
+      if (!opts.duringMfaSetup && mfaPending(req.user)) {
+        return void reply.code(403).send({ error: 'Configura la verifica in due passaggi per continuare', code: 'mfa_setup_required' });
+      }
+      if (role && !atLeast(req.user.role, role)) {
         audit.log(req, 'access.denied', 'denied', req.routeOptions.url ?? req.url);
-        return void reply.code(403).send({ error: 'Permesso riservato agli amministratori' });
+        return void reply.code(403).send({ error: DENIED[role] });
       }
     };
   const viewer = { preHandler: auth() };
+  const operator = { preHandler: auth('operator') };
   const admin = { preHandler: auth('admin') };
+  const enrolling = { preHandler: auth(undefined, { duringMfaSetup: true }) };
+  const isAdmin = (req: FastifyRequest) => !!req.user && atLeast(req.user.role, 'admin');
+
+  const userOut = (u: Pick<SessionUser, 'id' | 'username' | 'role' | 'mfa'>, csrf: string) => ({
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    csrf,
+    mfa: { enabled: u.mfa, required: !!mfa && MFA_REQUIRED.has(u.role), setupRequired: mfaPending(u as SessionUser) },
+  });
 
   const setCookie = (reply: FastifyReply, token: string) =>
     reply.setCookie(COOKIE, token, {
@@ -49,7 +84,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   // ───────────── Autenticazione ─────────────
   app.get('/api/v1/auth/state', async (req) => ({
     setupRequired: userCount() === 0,
-    user: req.user ? { id: req.user.id, username: req.user.username, role: req.user.role, csrf: req.user.csrf } : null,
+    user: req.user ? userOut(req.user, req.user.csrf) : null,
   }));
 
   const credentials = z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/), password: z.string().min(1).max(256) });
@@ -86,9 +121,9 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
       void integrations.checkAll();
       const s = sessions.create(id, req.ip, req.headers['user-agent'] ?? '');
       setCookie(reply, s.token);
-      req.user = { id, username: body.username, role: 'admin', csrf: s.csrf, tokenHash: '' };
+      req.user = { id, username: body.username, role: 'admin', csrf: s.csrf, tokenHash: '', mfa: false };
       audit.log(req, 'auth.setup', 'ok', body.username);
-      return { user: { id, username: body.username, role: 'admin', csrf: s.csrf } };
+      return { user: userOut(req.user, s.csrf) };
     },
   );
 
@@ -113,17 +148,133 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
         audit.log(req, 'auth.login', 'denied', username);
         return reply.code(401).send({ error: 'Utente o password errati' });
       }
+      // Con la verifica in due passaggi la sessione nasce solo dopo il codice (POST /auth/login/mfa).
+      if (mfa?.enabled(u.id)) {
+        audit.log(req, 'auth.login.password', 'ok', u.username);
+        return { mfaRequired: true, ticket: mfa.ticket(u.id) };
+      }
       limiter.clear([`user:${username.toLowerCase()}`]);
-      db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), u.id);
-      const s = sessions.create(u.id, req.ip, req.headers['user-agent'] ?? '');
-      setCookie(reply, s.token);
-      req.user = { id: u.id, username: u.username, role: u.role, csrf: s.csrf, tokenHash: '' };
-      audit.log(req, 'auth.login', 'ok', u.username);
-      return { user: { id: u.id, username: u.username, role: u.role, csrf: s.csrf } };
+      return startSession(req, reply, u, null);
     },
   );
 
-  app.post('/api/v1/auth/logout', viewer, async (req, reply) => {
+  const startSession = (req: FastifyRequest, reply: FastifyReply, u: { id: string; username: string; role: Role }, method: 'totp' | 'recovery' | null) => {
+    db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(Date.now(), u.id);
+    const s = sessions.create(u.id, req.ip, req.headers['user-agent'] ?? '');
+    setCookie(reply, s.token);
+    req.user = { id: u.id, username: u.username, role: u.role, csrf: s.csrf, tokenHash: '', mfa: method !== null || !!mfa?.enabled(u.id) };
+    audit.log(req, 'auth.login', 'ok', u.username, method ? { mfa: method } : undefined);
+    return { user: userOut(req.user, s.csrf), ...(method === 'recovery' ? { recoveryLeft: mfa!.recoveryLeft(u.id) } : {}) };
+  };
+
+  app.post(
+    '/api/v1/auth/login/mfa',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!mfa) return reply.code(404).send({ error: 'Non disponibile' });
+      const body = z.object({ ticket: z.string().min(10).max(100), code: z.string().trim().min(6).max(20) }).safeParse(req.body);
+      if (!body.success) return reply.code(400).send({ error: 'Codice non valido' });
+      const userId = mfa.useTicket(body.data.ticket);
+      if (!userId) return reply.code(401).send({ error: 'Accesso scaduto: inserisci di nuovo nome utente e password', code: 'ticket_expired' });
+      const u = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(userId) as
+        | { id: string; username: string; role: Role; disabled: number }
+        | undefined;
+      if (!u || u.disabled) return reply.code(401).send({ error: 'Utente non valido', code: 'ticket_expired' });
+      const keys = [`ip:${req.ip}`, `user:${u.username.toLowerCase()}`];
+      if (limiter.blocked(keys)) {
+        mfa.dropTicket(body.data.ticket);
+        audit.log(req, 'auth.login.mfa', 'denied', u.username, { reason: 'troppi tentativi' });
+        return reply.code(429).send({ error: 'Troppi tentativi falliti. Riprova tra qualche minuto.' });
+      }
+      const method = mfa.verify(u.id, body.data.code);
+      if (!method) {
+        limiter.fail(keys);
+        audit.log(req, 'auth.login.mfa', 'denied', u.username);
+        return reply.code(401).send({ error: 'Codice non valido o già usato' });
+      }
+      mfa.dropTicket(body.data.ticket);
+      limiter.clear([`user:${u.username.toLowerCase()}`]);
+      return startSession(req, reply, u, method);
+    },
+  );
+
+  // ───────────── Verifica in due passaggi (D-029) ─────────────
+  if (mfa) {
+    const strict = (max: number) => ({ ...enrolling, config: { rateLimit: { max, timeWindow: '15 minutes' } } });
+    const passwordOk = async (userId: string, password: string) => {
+      const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as { password_hash: string } | undefined;
+      return !!row && (await verifyPassword(password, row.password_hash));
+    };
+
+    app.get('/api/v1/auth/mfa', enrolling, async (req) => {
+      const r = req as Authed;
+      return { enabled: r.user.mfa, required: MFA_REQUIRED.has(r.user.role), recoveryLeft: mfa.recoveryLeft(r.user.id) };
+    });
+
+    app.post('/api/v1/auth/mfa/begin', strict(10), async (req, reply) => {
+      const r = req as Authed;
+      const body = z.object({ password: z.string().min(1).max(256) }).parse(req.body);
+      if (!(await passwordOk(r.user.id, body.password))) {
+        audit.log(req, 'mfa.begin', 'denied', r.user.username, { reason: 'password errata' });
+        return reply.code(403).send({ error: 'Password errata' });
+      }
+      return mfa.begin(r.user.id, r.user.username);
+    });
+
+    app.post('/api/v1/auth/mfa/confirm', strict(10), async (req, reply) => {
+      const r = req as Authed;
+      const body = z.object({ code: z.string().trim().max(20) }).parse(req.body);
+      const codes = mfa.confirm(r.user.id, body.code);
+      if (!codes) {
+        audit.log(req, 'mfa.enable', 'denied', r.user.username);
+        return reply.code(400).send({ error: 'Codice non valido: controlla che l’ora del telefono sia corretta e riprova' });
+      }
+      sessions.destroyForUser(r.user.id, r.user.tokenHash);
+      audit.log(req, 'mfa.enable', 'ok', r.user.username);
+      events.add('info', 'sicurezza', `Verifica in due passaggi attivata per ${r.user.username}`);
+      return { recoveryCodes: codes };
+    });
+
+    app.post('/api/v1/auth/mfa/recovery', strict(10), async (req, reply) => {
+      const r = req as Authed;
+      const body = z.object({ code: z.string().trim().max(20) }).parse(req.body);
+      if (!r.user.mfa || mfa.verify(r.user.id, body.code) !== 'totp') {
+        audit.log(req, 'mfa.recovery', 'denied', r.user.username);
+        return reply.code(400).send({ error: 'Serve un codice valido dell’app di autenticazione' });
+      }
+      audit.log(req, 'mfa.recovery', 'ok', r.user.username);
+      return { recoveryCodes: mfa.regenerateRecovery(r.user.id) };
+    });
+
+    app.post('/api/v1/auth/mfa/disable', strict(10), async (req, reply) => {
+      const r = req as Authed;
+      const body = z.object({ password: z.string().min(1).max(256), code: z.string().trim().max(20) }).parse(req.body);
+      if (!r.user.mfa || !(await passwordOk(r.user.id, body.password)) || !mfa.verify(r.user.id, body.code)) {
+        audit.log(req, 'mfa.disable', 'denied', r.user.username);
+        return reply.code(403).send({ error: 'Password o codice non validi' });
+      }
+      mfa.disable(r.user.id);
+      audit.log(req, 'mfa.disable', 'ok', r.user.username);
+      events.add('warning', 'sicurezza', `Verifica in due passaggi disattivata per ${r.user.username}`);
+      return { ok: true, setupRequired: MFA_REQUIRED.has(r.user.role) };
+    });
+
+    app.delete('/api/v1/users/:id/mfa', admin, async (req, reply) => {
+      const r = req as Authed;
+      const { id } = req.params as { id: string };
+      if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
+      if (id === r.user.id) return reply.code(409).send({ error: 'Per la tua verifica in due passaggi usa «Disattiva» nella tua scheda' });
+      const u = db.prepare('SELECT username FROM users WHERE id = ?').get(id) as { username: string } | undefined;
+      if (!u) return reply.code(404).send({ error: 'Utente non trovato' });
+      mfa.disable(id);
+      sessions.destroyForUser(id);
+      audit.log(req, 'mfa.reset', 'ok', u.username);
+      events.add('warning', 'sicurezza', `Verifica in due passaggi azzerata per ${u.username} da ${r.user.username}`);
+      return { ok: true };
+    });
+  }
+
+  app.post('/api/v1/auth/logout', enrolling, async (req, reply) => {
     const r = req as Authed;
     sessions.destroy(r.user.tokenHash);
     audit.log(req, 'auth.logout', 'ok', r.user.username);
@@ -173,19 +324,26 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   // ───────────── Utenti (admin) ─────────────
   app.get('/api/v1/users', admin, async () =>
     (
-      db.prepare('SELECT id, username, role, disabled, created_at, last_login_at FROM users ORDER BY created_at').all() as {
-        id: string;
-        username: string;
-        role: Role;
-        disabled: number;
-        created_at: number;
-        last_login_at: number | null;
-      }[]
-    ).map((u) => ({ id: u.id, username: u.username, role: u.role, disabled: !!u.disabled, createdAt: u.created_at, lastLoginAt: u.last_login_at })),
+      db
+        .prepare(
+          `SELECT u.id, u.username, u.role, u.disabled, u.created_at, u.last_login_at, COALESCE(m.enabled, 0) AS mfa
+           FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id ORDER BY u.created_at`,
+        )
+        .all() as { id: string; username: string; role: Role; disabled: number; created_at: number; last_login_at: number | null; mfa: number }[]
+    ).map((u) => ({
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      disabled: !!u.disabled,
+      createdAt: u.created_at,
+      lastLoginAt: u.last_login_at,
+      mfa: !!u.mfa,
+      mfaRequired: MFA_REQUIRED.has(u.role),
+    })),
   );
 
   app.post('/api/v1/users', admin, async (req, reply) => {
-    const body = credentials.extend({ role: z.enum(['admin', 'viewer']) }).parse(req.body);
+    const body = credentials.extend({ role: z.enum(['admin', 'operator', 'viewer']) }).parse(req.body);
     const problem = passwordProblems(body.password, body.username);
     if (problem) return reply.code(400).send({ error: problem });
     if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(body.username)) return reply.code(409).send({ error: 'Nome utente già esistente' });
@@ -208,15 +366,15 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     const { id } = req.params as { id: string };
     if (!UUID.test(id)) return reply.code(400).send({ error: 'id non valido' });
     const body = z
-      .object({ role: z.enum(['admin', 'viewer']).optional(), disabled: z.boolean().optional(), password: z.string().max(256).optional() })
+      .object({ role: z.enum(['admin', 'operator', 'viewer']).optional(), disabled: z.boolean().optional(), password: z.string().max(256).optional() })
       .parse(req.body);
     const u = db.prepare('SELECT id, username, role, disabled FROM users WHERE id = ?').get(id) as
       | { id: string; username: string; role: Role; disabled: number }
       | undefined;
     if (!u) return reply.code(404).send({ error: 'Utente non trovato' });
-    const losingAdmin = u.role === 'admin' && !u.disabled && (body.role === 'viewer' || body.disabled === true);
+    const losingAdmin = u.role === 'admin' && !u.disabled && ((body.role !== undefined && body.role !== 'admin') || body.disabled === true);
     if (losingAdmin && adminCount() <= 1) return reply.code(409).send({ error: "Deve restare almeno un amministratore attivo" });
-    if (id === r.user.id && (body.disabled || body.role === 'viewer')) return reply.code(409).send({ error: 'Non puoi disabilitare o declassare te stesso' });
+    if (id === r.user.id && (body.disabled || (body.role !== undefined && body.role !== 'admin'))) return reply.code(409).send({ error: 'Non puoi disabilitare o declassare te stesso' });
     if (body.password !== undefined) {
       const problem = passwordProblems(body.password, u.username);
       if (problem) return reply.code(400).send({ error: problem });
@@ -294,7 +452,8 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   });
 
   // Log in streaming via Server-Sent Events (stessa sessione/cookie, nessun token in URL). Solo admin.
-  app.get('/api/v1/docker/containers/:id/logs', admin, async (req, reply) => {
+  // Log (già oscurati dall'agent) anche agli operatori: servono per capire se e perché riavviare (D-028).
+  app.get('/api/v1/docker/containers/:id/logs', operator, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!ID.test(id)) return reply.code(400).send({ error: 'id non valido' });
     const q = req.query as { tail?: string; follow?: string };
@@ -332,10 +491,15 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     });
   });
 
-  app.post('/api/v1/docker/containers/:id/actions', admin, async (req, reply) => {
+  app.post('/api/v1/docker/containers/:id/actions', operator, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!ID.test(id)) return reply.code(400).send({ error: 'id non valido' });
     const body = z.object({ action: z.enum(['start', 'stop', 'restart']), confirm: z.string().max(128).optional() }).parse(req.body);
+    // Gli operatori avviano e riavviano; fermare un servizio resta agli admin (D-028).
+    if (body.action === 'stop' && !isAdmin(req)) {
+      audit.log(req, 'docker.stop', 'denied', id, { reason: 'ruolo operatore' });
+      return reply.code(403).send({ error: 'Fermare un container è riservato agli amministratori' });
+    }
     const c = await agent.json<{ name: string; controllable: boolean }>('GET', `/v1/containers/${encodeURIComponent(id)}`);
     if (!c.controllable) {
       audit.log(req, `docker.${body.action}`, 'denied', c.name, { reason: 'non controllabile' });
@@ -426,13 +590,17 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     return integrations.resource(id, name, new URLSearchParams(req.query as Record<string, string>));
   });
 
-  app.post('/api/v1/integrations/:id/actions/:name', { ...admin, bodyLimit: 6 * 1024 * 1024 }, async (req, reply) => {
+  app.post('/api/v1/integrations/:id/actions/:name', { ...operator, bodyLimit: 6 * 1024 * 1024 }, async (req, reply) => {
     const { id, name } = req.params as { id: string; name: string };
     if (!UUID.test(id) || !/^[a-zA-Z]{1,30}$/.test(name)) return reply.code(400).send({ error: 'parametri non validi' });
     const body = (req.body ?? {}) as Record<string, unknown>;
     // Nell'audit non finisce il contenuto dei file caricati
     const auditBody = typeof body.torrentBase64 === 'string' ? { ...body, torrentBase64: `<${Math.round((body.torrentBase64 as string).length * 0.75 / 1024)} KB>` } : body;
     const target = integrations.get(id);
+    if (!isAdmin(req) && !operatorMay(target.type, name, body)) {
+      audit.log(req, `integration.action.${name}`, 'denied', target.name, { reason: 'ruolo operatore' });
+      return reply.code(403).send({ error: 'Azione riservata agli amministratori' });
+    }
     // Protezione: niente eliminazione dei file di torrent che il motore media non ha ancora importato
     if (target.type === 'qbittorrent' && name === 'delete' && body.deleteFiles === true && body.force !== true && d.media) {
       const pending = await d.media.pendingFor(Array.isArray(body.hashes) ? (body.hashes as string[]) : []).catch(() => null);
@@ -524,7 +692,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
     return { ok: true };
   });
 
-  d.media?.register(app, audit, viewer, admin);
+  d.media?.register(app, audit, viewer, admin, operator);
   if (d.filesSocket) registerFiles(app, d.filesSocket, audit, admin);
   if (d.automations) registerAutomations(app, d.automations, events, audit, viewer, admin);
   if (d.backups) registerBackups(app, d.backups, audit, admin);

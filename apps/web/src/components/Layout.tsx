@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { ROLE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useOverview } from '../lib/queries';
 import { useTheme } from '../lib/theme';
@@ -186,7 +187,7 @@ export function Layout() {
             <div className="mx-1 hidden h-5 w-px bg-line sm:block" />
             <div className="hidden text-right leading-tight sm:block">
               <div className="text-[13px] font-medium">{user?.username}</div>
-              <div className="text-[11px] text-muted">{user?.role === 'admin' ? 'Amministratore' : 'Sola lettura'}</div>
+              <div className="text-[11px] text-muted">{user ? ROLE_LABEL[user.role] : ''}</div>
             </div>
             <Button variant="ghost" size="icon" onClick={() => void logout()} aria-label="Esci">
               <LogOut />

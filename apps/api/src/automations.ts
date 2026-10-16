@@ -12,7 +12,7 @@ import { newId, type Audit } from './security.js';
 import { safeFetch, validateUrl, TargetError } from './ssrf.js';
 import type { Vault } from './vault.js';
 
-export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup'] as const;
+export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup', 'sicurezza'] as const;
 const LEVELS: Level[] = ['info', 'warning', 'error'];
 
 type ChannelRow = { id: string; type: string; name: string; config: string; secret_enc: string | null; enabled: number; created_at: number; updated_at: number };

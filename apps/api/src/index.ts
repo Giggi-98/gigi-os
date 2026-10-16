@@ -10,6 +10,7 @@ import { Integrations } from './integrations.js';
 import { MediaBridge } from './media.js';
 import { Network } from './network.js';
 import { Metrics } from './metrics.js';
+import { Mfa } from './mfa.js';
 import { Automations, watchDownloads } from './automations.js';
 import { Backups } from './backup.js';
 import { getSetting, setSetting } from './db.js';
@@ -86,6 +87,7 @@ async function main() {
     backups,
     network,
     metrics,
+    mfa: new Mfa(db, vault),
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

@@ -193,7 +193,7 @@ function portsLabel(c: Container) {
 type DTab = 'overview' | 'logs' | 'env' | 'storage';
 
 function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void }) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isOperator } = useAuth();
   const [tab, setTab] = useState<DTab>('overview');
   const [action, setAction] = useState<'start' | 'stop' | 'restart' | null>(null);
   const [remove, setRemove] = useState(false);
@@ -219,7 +219,7 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
             </div>
             <p className="mt-0.5 truncate font-mono text-xs text-muted">{c?.image}</p>
           </div>
-          {isAdmin && c && (
+          {isOperator && c && (
             <div className="flex shrink-0 gap-1.5">
               {c.controllable ? (
                 <>
@@ -228,18 +228,22 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
                       <Button size="sm" onClick={() => setAction('restart')}>
                         <RotateCw /> Riavvia
                       </Button>
-                      <Button size="sm" onClick={() => setAction('stop')}>
-                        <Square /> Ferma
-                      </Button>
+                      {isAdmin && (
+                        <Button size="sm" onClick={() => setAction('stop')}>
+                          <Square /> Ferma
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <>
                       <Button size="sm" variant="primary" onClick={() => setAction('start')}>
                         <Power /> Avvia
                       </Button>
-                      <Button size="sm" variant="danger" onClick={() => setRemove(true)}>
-                        <Trash2 /> Rimuovi
-                      </Button>
+                      {isAdmin && (
+                        <Button size="sm" variant="danger" onClick={() => setRemove(true)}>
+                          <Trash2 /> Rimuovi
+                        </Button>
+                      )}
                     </>
                   )}
                 </>
@@ -260,7 +264,8 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
             onChange={setTab}
             items={[
               { id: 'overview', label: 'Panoramica' },
-              ...(isAdmin ? [{ id: 'logs' as const, label: 'Log' }, { id: 'env' as const, label: 'Configurazione' }] : []),
+              ...(isOperator ? [{ id: 'logs' as const, label: 'Log' }] : []),
+              ...(isAdmin ? [{ id: 'env' as const, label: 'Configurazione' }] : []),
               { id: 'storage', label: 'Mount e rete' },
             ]}
           />

@@ -16,6 +16,7 @@ import type { Automations } from './automations.js';
 import type { Backups } from './backup.js';
 import type { Network } from './network.js';
 import type { Metrics } from './metrics.js';
+import type { Mfa } from './mfa.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -41,10 +42,12 @@ export type Deps = {
   backups?: Backups;
   network?: Network;
   metrics?: Metrics;
+  /** Verifica in due passaggi; assente nei test che non la riguardano. */
+  mfa?: Mfa;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const CSRF_EXEMPT = new Set(['/api/v1/auth/login', '/api/v1/auth/setup']);
+const CSRF_EXEMPT = new Set(['/api/v1/auth/login', '/api/v1/auth/login/mfa', '/api/v1/auth/setup']);
 
 export async function buildApp(deps: Deps): Promise<FastifyInstance> {
   const app = Fastify({

@@ -18,6 +18,7 @@ import { DownloadsPage } from './pages/Downloads';
 import { FilesPage } from './pages/Files';
 import { IntegrationsPage } from './pages/Integrations';
 import { Login } from './pages/Login';
+import { MfaRequiredPage } from './pages/MfaSetup';
 import { MediaPage } from './pages/Media';
 import { MediaAutomationPage } from './pages/MediaAutomation';
 import { SecurityPage } from './pages/Security';
@@ -43,6 +44,7 @@ function App() {
       </div>
     );
   if (!user) return <Login setup={state.setupRequired} />;
+  if (user.mfa?.setupRequired) return <MfaRequiredPage />;
   return (
     <Routes>
       <Route element={<Layout />}>

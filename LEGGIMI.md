@@ -31,11 +31,30 @@ GIGI OS gira in un proprio stack Docker (`gigi-os`). Le altre applicazioni (Jell
 | Integrazioni | Aggiunta, verifica, modifica e rimozione dei connettori; credenziali cifrate | Jellyfin, qBittorrent, Navidrome, Home Assistant, Armony, Apollo, HTTP generico |
 | Automazioni | Regole sugli eventi (Docker, sistema, integrazioni, media, download, backup) con livello minimo, filtro testo, antiripetizione e ore di silenzio; canali Home Assistant, ntfy, Telegram (con **rilevamento automatico del Chat ID**) e webhook con prova di invio; storico notifiche; registro eventi | 7 regole suggerite create **disattivate**. Segreti dei canali cifrati. Nuovi eventi: download completato, media da rivedere, servizio systemd in errore |
 | Backup | Backup giornaliero (03:30, 14 copie) di database GIGI OS e motore media (`VACUUM INTO` + `integrity_check`), `.env`, `compose.yaml` e **configurazioni di qBittorrent e Jellyfin** (incluso `jellyfin.db` copiato a caldo); esecuzione manuale, download, eliminazione, guida al ripristino | La chiave master è esclusa salvo opzione esplicita. I backup sono in `/opt/gigi-os/backups` (stesso disco: scaricane copie altrove) |
-| Sicurezza | Cambio password, sessioni attive, utenti e ruoli, audit log, modello di sicurezza | Ruoli: amministratore e sola lettura |
+| Sicurezza | Cambio password, **verifica in due passaggi** (app di autenticazione, codici di recupero, cambio telefono), sessioni attive, utenti e ruoli con stato della 2FA e azzeramento, audit log, modello di sicurezza | Ruoli: amministratore, **operatore**, sola lettura (vedi sotto). 2FA obbligatoria per amministratori e operatori |
 
 **Non disponibili per scelta:** avvio/riavvio dei servizi systemd (richiederebbe privilegi sull’host); azioni sugli stack non creati da GIGI OS. **Limite degli stack:** `build:` funziona solo con il builder classico e con il Dockerfile già nella cartella dello stack (niente `dockerfile_inline`). **Non ancora disponibile:** editor visuale delle automazioni.
 
 **Notifiche attive:** canale Home Assistant `notify.persistent_notification` (campanella nel pannello di HA) con 8 regole. Per riceverle sul telefono: installa l’app Home Assistant, poi in Automazioni → Canali scegli `notify.mobile_app_…`, oppure aggiungi Telegram.
+
+## Ruoli e verifica in due passaggi
+
+| Ruolo | Può | Non può |
+|---|---|---|
+| Amministratore | Tutto | — |
+| Operatore | Avviare e riavviare container, leggerne i log; gestire i torrent (avvia/ferma, categoria, limiti, aggiunta, ricerca, rimozione del solo torrent); confermare e correggere i media da rivedere, lanciare una scansione; comandi di Armony | Fermare container, stack, file, utenti, integrazioni, automazioni, backup, pulizia Docker, eliminazioni di file o dalla libreria |
+| Sola lettura | Vedere stato, metriche e liste | Log, variabili d’ambiente, qualsiasi azione |
+
+**Verifica in due passaggi (2FA).** Per amministratori e operatori è obbligatoria: al primo accesso GIGI OS mostra solo la schermata di configurazione. Serve un’app di autenticazione (Aegis, 2FAS, Google o Microsoft Authenticator): conferma la password, inquadra il QR, inserisci il codice e **salva i 10 codici di recupero** fuori dal PC (ognuno vale una volta). Per la sola lettura è facoltativa (Sicurezza → Il mio account).
+
+- **Telefono nuovo:** Sicurezza → Il mio account → «Cambia telefono» (password + codice o codice di recupero), poi si configura il nuovo.
+- **Telefono perso con codici di recupero:** al login scegli «Usa un codice di recupero».
+- **Un altro utente ha perso tutto:** un amministratore usa «Azzera» nella tabella Utenti.
+- **L’unico amministratore ha perso telefono e codici:** dal server
+  ```
+  docker exec gigi-api node apps/api/dist/reset-mfa.js <utente>
+  ```
+  L’operazione chiude le sessioni dell’utente e finisce nell’audit; al login successivo si configura di nuovo.
 
 ## Media automation: come funziona
 

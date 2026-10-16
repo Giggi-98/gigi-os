@@ -22,14 +22,24 @@ export function migrate(db: DB, dir = path.join(path.dirname(fileURLToPath(impor
     const version = Number(f.slice(0, 3));
     if (applied.has(version)) continue;
     const sql = readFileSync(path.join(dir, f), 'utf8');
+    // Ricostruzione di tabelle referenziate (procedura ufficiale SQLite): chiavi esterne spente fuori dalla transazione,
+    // altrimenti DROP TABLE cancellerebbe a cascata le righe collegate; verifica prima del COMMIT.
+    const fkOff = /^--\s*gigi:foreign-keys-off\b/m.test(sql);
+    if (fkOff) db.exec('PRAGMA foreign_keys = OFF');
     db.exec('BEGIN');
     try {
       db.exec(sql);
+      if (fkOff) {
+        const broken = db.prepare('PRAGMA foreign_key_check').all();
+        if (broken.length) throw new Error(`chiavi esterne non valide: ${JSON.stringify(broken.slice(0, 3))}`);
+      }
       db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(version, f, Date.now());
       db.exec('COMMIT');
     } catch (e) {
       db.exec('ROLLBACK');
       throw new Error(`Migrazione ${f} fallita: ${(e as Error).message}`);
+    } finally {
+      if (fkOff) db.exec('PRAGMA foreign_keys = ON');
     }
   }
 }

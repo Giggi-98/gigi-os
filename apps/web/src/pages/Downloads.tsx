@@ -159,7 +159,7 @@ function useCategories(qb: Integration) {
 }
 
 function TorrentsTab({ qb }: { qb: Integration }) {
-  const { isAdmin } = useAuth();
+  const { isOperator } = useAuth();
   const toast = useToast();
   const t = useResource<Torrent[]>(qb, 'torrents', '', 3_000);
   const media = useQuery({ queryKey: ['media-items'], queryFn: () => api<MediaItem[]>('/media/items?limit=1000'), refetchInterval: 15_000, retry: 0 });
@@ -213,7 +213,7 @@ function TorrentsTab({ qb }: { qb: Integration }) {
             </option>
           ))}
         </Select>
-        {isAdmin && selected.length > 0 && (
+        {isOperator && selected.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2 py-1">
             <span className="px-1 text-xs font-medium">{selected.length} selezionati</span>
             <Button size="sm" variant="ghost" onClick={() => run('control', { op: 'start', hashes: selected }, 'Avviati')}>
@@ -242,18 +242,18 @@ function TorrentsTab({ qb }: { qb: Integration }) {
             <table className="w-full min-w-[920px] text-left text-[13px]">
               <thead className="border-b border-line text-xs text-muted">
                 <tr>
-                  {isAdmin && (
+                  {isOperator && (
                     <th className="w-10 py-2 pl-4">
                       <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={sel.size > 0 && selected.length === rows.length} onChange={toggleAll} aria-label="Seleziona tutti" />
                     </th>
                   )}
-                  <th className={cx('py-2 font-medium', !isAdmin && 'pl-4')}>Nome</th>
+                  <th className={cx('py-2 font-medium', !isOperator && 'pl-4')}>Nome</th>
                   <th className="px-3 py-2 font-medium">Stato</th>
                   <th className="w-40 px-3 py-2 font-medium">Avanzamento</th>
                   <th className="px-3 py-2 text-right font-medium">Velocità</th>
                   <th className="px-3 py-2 text-right font-medium">Ratio · seed</th>
                   <th className="px-3 py-2 font-medium">Libreria</th>
-                  {isAdmin && <th className="px-4 py-2 text-right font-medium">Azioni</th>}
+                  {isOperator && <th className="px-4 py-2 text-right font-medium">Azioni</th>}
                 </tr>
               </thead>
               <tbody>
@@ -264,7 +264,7 @@ function TorrentsTab({ qb }: { qb: Integration }) {
                   const seeding = x.complete && !x.stopped;
                   return (
                     <tr key={x.hash} className={cx('border-b border-line/60 last:border-0', sel.has(x.hash) && 'bg-accent-soft/40')}>
-                      {isAdmin && (
+                      {isOperator && (
                         <td className="py-2.5 pl-4">
                           <input
                             type="checkbox"
@@ -275,7 +275,7 @@ function TorrentsTab({ qb }: { qb: Integration }) {
                           />
                         </td>
                       )}
-                      <td className={cx('max-w-[340px] py-2.5', !isAdmin && 'pl-4')}>
+                      <td className={cx('max-w-[340px] py-2.5', !isOperator && 'pl-4')}>
                         <div className="truncate font-medium" title={x.name}>{x.name}</div>
                         <div className="truncate text-[11px] text-muted">
                           {x.category ? <Badge className="mr-1">{x.category}</Badge> : <span className="mr-1">senza categoria ·</span>}
@@ -304,7 +304,7 @@ function TorrentsTab({ qb }: { qb: Integration }) {
                         </div>
                       </td>
                       <td className="px-3">{best ? <Badge tone={MEDIA[best][1]}>{MEDIA[best][0]}</Badge> : <span className="text-xs text-muted">—</span>}</td>
-                      {isAdmin && (
+                      {isOperator && (
                         <td className="px-4 text-right whitespace-nowrap">
                           {x.complete ? (
                             <Button
@@ -350,7 +350,9 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
   const toast = useToast();
   const qc = useQueryClient();
   const act = useAction(qb);
-  const [mode, setMode] = useState<'everywhere' | 'files' | 'torrent'>('everywhere');
+  // Gli operatori rimuovono solo il torrent: eliminare file o libreria resta agli admin (D-028).
+  const { isAdmin } = useAuth();
+  const [mode, setMode] = useState<'everywhere' | 'files' | 'torrent'>(isAdmin ? 'everywhere' : 'torrent');
   const [typed, setTyped] = useState('');
   const [blocked, setBlocked] = useState<string[] | null>(null);
   const [force, setForce] = useState(false);
@@ -384,10 +386,10 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
     );
   };
   const options: [typeof mode, string, string][] = [
-    ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e copia in libreria: il titolo sparisce anche da Jellyfin e Apollo e libera lo spazio.'],
-    ['files', 'Elimina torrent e file scaricati', 'La copia già importata in libreria resta disponibile in Jellyfin.'],
-    ['torrent', 'Rimuovi solo da qBittorrent', 'Tutti i file restano dove sono.'],
-  ];
+    ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e copia in libreria: il titolo sparisce anche da Jellyfin e Apollo e libera lo spazio.'] as [typeof mode, string, string],
+    ['files', 'Elimina torrent e file scaricati', 'La copia già importata in libreria resta disponibile in Jellyfin.'] as [typeof mode, string, string],
+    ['torrent', 'Rimuovi solo da qBittorrent', isAdmin ? 'Tutti i file restano dove sono.' : 'Tutti i file restano dove sono. Le eliminazioni dei file sono riservate agli amministratori.'] as [typeof mode, string, string],
+  ].filter(([m]) => isAdmin || m === 'torrent');
   const pending = act.isPending || purge.isPending;
   return (
     <Dialog
@@ -552,7 +554,7 @@ const SEARCH_CATS: [string, string, string][] = [
 ];
 
 function SearchTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
-  const { isAdmin } = useAuth();
+  const { isOperator } = useAuth();
   const toast = useToast();
   const plugins = useResource<{ name: string; fullName: string; enabled: boolean }[]>(qb, 'plugins', '', 300_000);
   const cats = useCategories(qb);
@@ -602,7 +604,7 @@ function SearchTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
   const shown = state.results.filter((r) => r.seeders >= minSeeds);
   const defaultCat = SEARCH_CATS.find((c) => c[0] === category)?.[2] ?? '';
 
-  if (!isAdmin) return <Card><Empty title="La ricerca è riservata agli amministratori" /></Card>;
+  if (!isOperator) return <Card><Empty title="La ricerca è riservata a operatori e amministratori" /></Card>;
 
   return (
     <div className="space-y-4">
@@ -790,7 +792,7 @@ function AddConfirm({
 }
 
 function AddTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
-  const { isAdmin } = useAuth();
+  const { isOperator } = useAuth();
   const toast = useToast();
   const cats = useCategories(qb);
   const act = useAction(qb);
@@ -799,7 +801,7 @@ function AddTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
   const [cat, setCat] = useState('');
   const [stopped, setStopped] = useState(false);
 
-  if (!isAdmin) return <Card><Empty title="Riservato agli amministratori" /></Card>;
+  if (!isOperator) return <Card><Empty title="Riservato a operatori e amministratori" /></Card>;
 
   const onFile = (f: File | undefined) => {
     if (!f) return setFile(null);
