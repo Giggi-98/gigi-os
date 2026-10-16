@@ -1,5 +1,5 @@
 // Grafici SVG leggeri (nessuna libreria): area/linea con griglia, asse temporale e tooltip.
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export type Series = { key: string; label: string; color: string; values: (number | null)[]; format?: (v: number) => string };
 
@@ -21,9 +21,16 @@ export function AreaChart({
   const uid = useId().replace(/:/g, '');
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
-  const W = 600;
+  // Larghezza reale in pixel: il testo SVG non viene stirato quando il contenitore è stretto (telefono, card laterali).
+  const [box, setBox] = useState<HTMLDivElement | null>(null);
+  const [W, setW] = useState(600);
+  useEffect(() => {
+    if (!box) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(160, Math.round(e.contentRect.width))));
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [box]);
   const H = height;
-  const padL = 34;
   const padB = 18;
   const padT = 6;
   const n = times.length;
@@ -35,6 +42,8 @@ export function AreaChart({
     return Math.ceil((m * 1.15) / mag) * mag;
   }, [series, max]);
 
+  const ticks = [0, 0.5, 1].map((f) => top * f);
+  const padL = Math.max(28, Math.max(...ticks.map((t) => yFormat(t).length)) * 6 + 10);
   const x = (i: number) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - 4));
   const y = (v: number) => padT + (1 - v / top) * (H - padT - padB);
 
@@ -52,10 +61,11 @@ export function AreaChart({
     const first = s.values.findIndex((v) => v !== null);
     const lastIdx = s.values.length - 1 - [...s.values].reverse().findIndex((v) => v !== null);
     const area = first >= 0 ? `${d}L${x(lastIdx)},${H - padB}L${x(first)},${H - padB}Z` : '';
-    return { ...s, d, area };
+    // Punti senza vicini (tra due buchi): una linea non li disegnerebbe.
+    const dots = s.values.flatMap((v, i) => (v !== null && (s.values[i - 1] ?? null) === null && (s.values[i + 1] ?? null) === null ? [i] : []));
+    return { ...s, d, area, dots };
   });
 
-  const ticks = [0, 0.5, 1].map((f) => top * f);
   const timeTicks = n > 1 ? [0, Math.floor((n - 1) / 2), n - 1] : [];
   const long = n > 1 && times[n - 1] - times[0] > 20 * 3600_000;
   const fmtT = (t: number) =>
@@ -74,7 +84,7 @@ export function AreaChart({
   if (n < 2) return <div className="flex items-center justify-center text-xs text-muted" style={{ height }}>Raccolta dati in corso…</div>;
 
   return (
-    <div className="relative">
+    <div className="relative" ref={setBox}>
       <svg
         ref={ref}
         viewBox={`0 0 ${W} ${H}`}
@@ -111,6 +121,9 @@ export function AreaChart({
           <g key={p.key}>
             {series.length === 1 && <path d={p.area} fill={`url(#g-${uid}-${p.key})`} />}
             <path d={p.d} fill="none" stroke={p.color} strokeWidth="1.75" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {p.dots.map((i) => (
+              <circle key={i} cx={x(i)} cy={y(p.values[i]!)} r="2" fill={p.color} />
+            ))}
           </g>
         ))}
         {hover !== null && (
