@@ -6,6 +6,7 @@ import { api, type EventRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ago, dateTime } from '../lib/format';
 import { byType, useIntegrations, useResource } from '../lib/queries';
+import { BotDigestTab } from './BotDigest';
 
 type Channel = { id: string; type: 'homeassistant' | 'ntfy' | 'telegram' | 'webhook'; name: string; config: Record<string, string>; secretFields: string[]; enabled: boolean };
 type Rule = { id: string; name: string; enabled: boolean; sources: string[]; minLevel: 'info' | 'warning' | 'error'; matchText: string | null; channels: string[]; throttleMin: number; quietFrom: string | null; quietTo: string | null };
@@ -15,7 +16,7 @@ const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', sistema: 'Siste
 const LEVEL: Record<string, [string, Tone]> = { info: ['Informazioni', 'info'], warning: ['Avvisi', 'warn'], error: ['Errori', 'err'] };
 const TYPE_LABEL: Record<Channel['type'], string> = { homeassistant: 'Home Assistant (app sul telefono)', ntfy: 'ntfy', telegram: 'Telegram', webhook: 'Webhook' };
 
-type Tab = 'rules' | 'channels' | 'history' | 'events';
+type Tab = 'rules' | 'channels' | 'bot' | 'history' | 'events';
 
 export function AutomationsPage() {
   const { isAdmin } = useAuth();
@@ -29,7 +30,12 @@ export function AutomationsPage() {
         onChange={setTab}
         items={[
           { id: 'rules', label: 'Regole' },
-          ...(isAdmin ? [{ id: 'channels' as const, label: 'Canali', count: channels.data?.length }] : []),
+          ...(isAdmin
+            ? [
+                { id: 'channels' as const, label: 'Canali', count: channels.data?.length },
+                { id: 'bot' as const, label: 'Bot e digest' },
+              ]
+            : []),
           { id: 'history', label: 'Notifiche inviate' },
           { id: 'events', label: 'Eventi' },
         ]}
@@ -37,6 +43,7 @@ export function AutomationsPage() {
       <div className="mt-4">
         {tab === 'rules' && <RulesTab channels={channels.data ?? []} goChannels={() => setTab('channels')} />}
         {tab === 'channels' && <ChannelsTab channels={channels} />}
+        {tab === 'bot' && <BotDigestTab channels={channels.data ?? []} />}
         {tab === 'history' && <HistoryTab channels={channels.data ?? []} />}
         {tab === 'events' && <EventsTab />}
       </div>

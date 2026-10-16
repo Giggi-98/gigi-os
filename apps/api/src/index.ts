@@ -12,11 +12,14 @@ import { Network } from './network.js';
 import { Metrics } from './metrics.js';
 import { Mfa } from './mfa.js';
 import { Launcher } from './launcher.js';
+import { TelegramBot } from './telegram.js';
+import { Digest } from './digest.js';
+import { MFA_REQUIRED } from './mfa.js';
 import { Automations, watchDownloads } from './automations.js';
 import { Backups } from './backup.js';
 import { getSetting, setSetting } from './db.js';
 import { Audit, LoginLimiter, Sessions } from './security.js';
-import { buildBlockList } from './ssrf.js';
+import { buildBlockList, validateUrl } from './ssrf.js';
 import { Vault } from './vault.js';
 
 const log = (level: string, msg: string, extra: object = {}) =>
@@ -33,6 +36,8 @@ async function main() {
   const audit = new Audit(db);
   const automations = new Automations(db, vault, integrations, buildBlockList(config.allowedTargets), buildBlockList, (m, e) => log('warn', m, e ?? {}));
   automations.seedRules();
+  // Solo per i test con un finto server Telegram locale: in produzione non va impostata
+  if (process.env.GIGI_TELEGRAM_API) automations.telegramBase = validateUrl(process.env.GIGI_TELEGRAM_API).origin;
   events.onAdd = (e) => automations.onEvent(e);
   const backups = new Backups(db, config.dataDir, config.backupDir, config.backupExtra, config.masterKeyFile, events, [
     {
@@ -53,8 +58,26 @@ async function main() {
   const metrics = new Metrics(db, agent, config.metricsDays);
   const launcher = new Launcher(db, buildBlockList(config.allowedTargets), integrations, agent, () => network.listening(), config.host, config.port);
   launcher.start((m, e) => log('warn', m, e ?? {}));
+  const mfa = new Mfa(db, vault);
   metrics.start((m, e) => log('warn', m, e ?? {}));
   const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events, new AgentClient(config.filesSocket, 'File manager'));
+  const warn = (m: string, e?: object) => log('warn', m, e ?? {});
+  const digest = new Digest(db, automations, metrics, agent, integrations, media);
+  digest.start(warn);
+  const bot = new TelegramBot({
+    db,
+    automations,
+    audit,
+    events,
+    integrations,
+    agent,
+    metrics,
+    media,
+    digest,
+    mfa: { required: (r) => MFA_REQUIRED.has(r), enabled: (id) => mfa.enabled(id) },
+    warn,
+  });
+  bot.start();
 
   // Codice di setup monouso: serve solo finché non esiste alcun utente.
   const tokenFile = path.join(config.dataDir, 'setup-token');
@@ -90,8 +113,10 @@ async function main() {
     backups,
     network,
     metrics,
-    mfa: new Mfa(db, vault),
+    mfa,
     launcher,
+    bot,
+    digest,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

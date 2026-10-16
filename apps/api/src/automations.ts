@@ -33,7 +33,7 @@ export type EventLike = { level: Level; source: string; title: string; details?:
 const PRIVATE = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '169.254.0.0/16', '100.64.0.0/10', '0.0.0.0/8', '::1/128', 'fc00::/7', 'fe80::/10'];
 
 /** Destinazioni di notifica: Internet pubblico consentito; indirizzi privati solo se nelle reti LAN autorizzate. */
-export async function notifyFetch(allowedLan: BlockList, privateList: BlockList, url: string, init: RequestInit) {
+export async function notifyFetch(allowedLan: BlockList, privateList: BlockList, url: string, init: RequestInit & { timeoutMs?: number }) {
   const u = validateUrl(url);
   const host = u.hostname.replace(/^\[|\]$/g, '');
   const addrs = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
@@ -41,7 +41,7 @@ export async function notifyFetch(allowedLan: BlockList, privateList: BlockList,
     const fam = a.family === 6 ? 'ipv6' : 'ipv4';
     if (privateList.check(a.address, fam) && !allowedLan.check(a.address, fam)) throw new TargetError(`Destinazione ${a.address} non consentita`, 'forbidden_target');
   }
-  const res = await fetch(u, { ...init, redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+  const res = await fetch(u, { ...init, redirect: 'manual', signal: AbortSignal.timeout(init.timeoutMs ?? 10_000) });
   const text = await res.text();
   if (text.length > 2 * 1024 * 1024) throw new Error('Risposta troppo grande');
   // Solo il messaggio d'errore viene accorciato: il corpo completo serve a chi deve interpretarlo (es. JSON di Telegram)
@@ -70,8 +70,14 @@ const ruleSchema = z.object({
 
 const SECRET_KEYS: Record<string, string[]> = { homeassistant: [], ntfy: ['token'], telegram: ['botToken'], webhook: ['authHeader'] };
 
+export type TelegramChat = { id: string; type: string; name: string; lastSeen: number };
+
 export class Automations {
   private privateList: BlockList;
+  /** Indirizzo delle API di Telegram (sostituibile nei test con un server locale). */
+  telegramBase = 'https://api.telegram.org';
+  /** Con il bot interattivo attivo su quel token, getUpdates è suo: il rilevamento del Chat ID usa le chat che ha già visto. */
+  telegramChatsFromBot: ((token: string) => TelegramChat[] | null) | null = null;
 
   constructor(
     private db: DB,
@@ -167,6 +173,41 @@ export class Automations {
     return fixed;
   }
 
+  /** Token del bot di un canale Telegram (resta nel processo: mai restituito al browser). */
+  telegramToken(channelId: string): string | null {
+    const r = this.db.prepare("SELECT * FROM notify_channels WHERE id = ? AND type = 'telegram'").get(channelId) as ChannelRow | undefined;
+    if (!r?.secret_enc) return null;
+    return (JSON.parse(this.vault.decrypt(r.secret_enc, `channel:${r.id}`)) as Record<string, string>).botToken ?? null;
+  }
+
+  /** Chiamata alle API del bot; il token non compare mai nei messaggi d'errore. */
+  async telegramCall<T = unknown>(token: string, method: string, body?: object, timeoutMs?: number): Promise<T> {
+    try {
+      const txt = await notifyFetch(this.allowedLan, this.privateList, `${this.telegramBase}/bot${token}/${method}`, {
+        method: body ? 'POST' : 'GET',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        timeoutMs,
+      });
+      const j = JSON.parse(txt) as { ok: boolean; result: T; description?: string };
+      if (!j.ok) throw new Error(j.description ?? 'risposta non valida');
+      return j.result;
+    } catch (e) {
+      throw new Error((e as Error).message.replaceAll(token, '•••'));
+    }
+  }
+
+  /** Invio con registrazione nello storico notifiche (usato da digest e bot, fuori dalle regole). */
+  async deliver(channelId: string, title: string, body: string, level: Level, label: string) {
+    try {
+      await this.send(channelId, title, body, level);
+      this.record(null, channelId, title, 'sent', undefined, label);
+    } catch (e) {
+      this.record(null, channelId, title, 'failed', (e as Error).message.slice(0, 300), label);
+      throw e;
+    }
+  }
+
   async send(channelId: string, title: string, body: string, level: Level) {
     const r = this.channelRow(channelId);
     const cfg = JSON.parse(r.config) as Record<string, string>;
@@ -196,7 +237,7 @@ export class Automations {
         }),
       });
     } else if (r.type === 'telegram') {
-      await notifyFetch(this.allowedLan, this.privateList, `https://api.telegram.org/bot${secret.botToken}/sendMessage`, {
+      await notifyFetch(this.allowedLan, this.privateList, `${this.telegramBase}/bot${secret.botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: cfg.chatId, text: `${icon} GIGI OS · ${title}${body ? `\n${body}` : ''}`, disable_web_page_preview: true }),
@@ -272,10 +313,10 @@ export class Automations {
     return a <= b ? m >= a && m < b : m >= a || m < b;
   }
 
-  private record(rule: RuleRow | null, channel: string | null, title: string, status: 'sent' | 'failed' | 'throttled' | 'quiet', error?: string) {
+  private record(rule: RuleRow | null, channel: string | null, title: string, status: 'sent' | 'failed' | 'throttled' | 'quiet', error?: string, label?: string) {
     this.db
       .prepare('INSERT INTO notifications (ts, rule_id, rule_name, channel, title, status, error) VALUES (?,?,?,?,?,?,?)')
-      .run(Date.now(), rule?.id ?? null, rule?.name ?? null, channel, title, status, error ?? null);
+      .run(Date.now(), rule?.id ?? null, rule?.name ?? label ?? null, channel, title, status, error ?? null);
   }
 
   /** Chiamato a ogni nuovo evento: valuta le regole e invia (in background, non blocca chi ha generato l'evento). */
@@ -323,7 +364,7 @@ export class Automations {
     if (!token || !/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) throw Object.assign(new Error('Token del bot non valido (formato 123456:ABC…)'), { statusCode: 400 });
     const call = async (method: string) => {
       try {
-        const txt = await notifyFetch(this.allowedLan, this.privateList, `https://api.telegram.org/bot${token}/${method}`, { method: 'GET' });
+        const txt = await notifyFetch(this.allowedLan, this.privateList, `${this.telegramBase}/bot${token}/${method}`, { method: 'GET' });
         return JSON.parse(txt) as { ok: boolean; result: unknown; description?: string };
       } catch (e) {
         const msg = (e as Error).message.replaceAll(token!, '•••');
@@ -331,6 +372,8 @@ export class Automations {
       }
     };
     const me = (await call('getMe')).result as { username: string; first_name: string };
+    const fromBot = this.telegramChatsFromBot?.(token);
+    if (fromBot) return { bot: `@${me.username}`, botName: me.first_name, chats: fromBot };
     const updates = (await call('getUpdates?limit=100&allowed_updates=%5B%22message%22%2C%22channel_post%22%2C%22my_chat_member%22%5D')).result as {
       message?: { chat: Chat; date: number };
       channel_post?: { chat: Chat; date: number };

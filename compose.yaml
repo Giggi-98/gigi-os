@@ -78,6 +78,8 @@ services:
       GIGI_LOG_LEVEL: ${GIGI_LOG_LEVEL:-warn}
       GIGI_MEDIA_SCAN_MS: ${GIGI_MEDIA_SCAN_MS:-120000}
       GIGI_METRICS_DAYS: ${GIGI_METRICS_DAYS:-30}
+      # Fuso orario per gli orari scelti dall'utente (backup, ore di silenzio, digest): senza, il container usa UTC
+      TZ: ${GIGI_TZ:-Europe/Rome}
       GIGI_BACKUP_DIR: /backups
       GIGI_BACKUP_EXTRA: env=/backup-src/.env,compose.yaml=/backup-src/compose.yaml
     volumes:

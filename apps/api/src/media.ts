@@ -16,6 +16,9 @@ type Creds = {
 };
 
 const ID = /^[0-9a-f]{20}$/;
+/** Vista minima di un elemento del motore media (i campi completi li mostra l’interfaccia). */
+export type MediaItem = { id: string; fileName: string; status: string; confidence: number | null; torrentHash: string; plan: { dest: string } | null };
+export const MEDIA_ID = ID;
 
 export class MediaBridge {
   constructor(
@@ -160,6 +163,25 @@ export class MediaBridge {
     return items.filter((i) => set.has(i.torrentHash.toLowerCase()) && !['imported', 'indexed', 'ignored'].includes(i.status)).map((i) => i.fileName);
   }
 
+  /** Elementi del motore media (usati anche da bot e digest). */
+  items(limit = 300) {
+    return this.media.json<MediaItem[]>('GET', `/v1/items?limit=${Math.min(limit, 1000)}`);
+  }
+
+  item(id: string) {
+    return this.media.json<MediaItem>('GET', `/v1/items/${id}`);
+  }
+
+  /** Azione su un elemento a nome di `actor`: stesso percorso per interfaccia e bot. L'audit lo fa il chiamante. */
+  async act(name: 'import' | 'ignore' | 'restore' | 'reanalyze', id: string, actor: string) {
+    const r = await this.media.json<{ fileName: string; plan?: { dest: string } }>('POST', `/v1/items/${id}/${name}`, 120_000, {
+      creds: name === 'ignore' || name === 'restore' ? null : await this.creds(),
+      actor,
+    });
+    if (name === 'import') this.events.add('info', 'media', `Importato da ${actor}: ${r.fileName}`);
+    return r;
+  }
+
   register(app: FastifyInstance, audit: Audit, viewer: object, admin: object, operator: object = admin) {
     const m = this.media;
     const who = (req: FastifyRequest) => (req.user as SessionUser).username;
@@ -206,12 +228,8 @@ export class MediaBridge {
       const { id } = req.params as { id: string };
       if (!ID.test(id)) return badId(reply);
       try {
-        const r = await m.json<{ fileName: string; plan?: { dest: string } }>('POST', `/v1/items/${id}/${name}`, 120_000, {
-          creds: name === 'ignore' || name === 'restore' ? null : await this.creds(),
-          actor: who(req),
-        });
+        const r = await this.act(name, id, who(req));
         audit.log(req, `media.${name}`, 'ok', r.fileName, name === 'import' ? { destinazione: r.plan?.dest } : undefined);
-        if (name === 'import') this.events.add('info', 'media', `Importato da ${who(req)}: ${r.fileName}`);
         return r;
       } catch (e) {
         audit.log(req, `media.${name}`, 'error', id, { err: (e as Error).message });

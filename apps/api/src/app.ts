@@ -18,6 +18,8 @@ import type { Network } from './network.js';
 import type { Metrics } from './metrics.js';
 import type { Mfa } from './mfa.js';
 import type { Launcher } from './launcher.js';
+import type { TelegramBot } from './telegram.js';
+import type { Digest } from './digest.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -46,6 +48,8 @@ export type Deps = {
   /** Verifica in due passaggi; assente nei test che non la riguardano. */
   mfa?: Mfa;
   launcher?: Launcher;
+  bot?: TelegramBot;
+  digest?: Digest;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

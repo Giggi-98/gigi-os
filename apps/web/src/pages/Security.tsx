@@ -6,6 +6,7 @@ import { api, ROLE_LABEL, type Role } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ago, dateTime } from '../lib/format';
 import { CodeInput, MfaEnroll, RecoveryCodes } from './MfaSetup';
+import { TelegramLinkCard } from './BotDigest';
 
 type Tab = 'account' | 'users' | 'audit' | 'posture';
 
@@ -67,6 +68,7 @@ function Account() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <MfaCard />
+      <TelegramLinkCard />
       <Card title="Cambia password" icon={<KeyRound />}>
         <form
           className="space-y-3"
