@@ -243,3 +243,21 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 - Senza journal, systemd o apt le sezioni restituiscono «non disponibile» invece di un errore (provato con l’immagine dell’agent senza mount).
 **Conseguenze per questo server.** Nessuna: i valori sono stati spostati in `.env` e `compose.override.yaml`. La configurazione risolta da `docker compose config` è identica a prima, salvo quattro variabili d’ambiente aggiunte.
 **Da rivedere se** l’installer (fase B) genera `.env` e override da solo, o se le librerie si ricavano direttamente da Jellyfin.
+
+## D-034 — Installer, immagini pubblicabili e automazioni GitHub (2026-10-16)
+
+**Scelta: installer.** `install.sh` in POSIX sh (verificato con `sh` e `dash`), da eseguire con sudo dalla cartella della repo:
+- rileva IP (rotta verso Internet), rete locale, GID di docker e systemd-journal, fuso orario e mount di Jellyfin e qBittorrent;
+- scrive `.env` (permessi 644: nessun segreto, gigi-api lo legge per i backup) e genera `compose.override.yaml` dai mount `/config` dei container `qbittorrent` e `jellyfin`; su questo server il file generato è identico a quello scritto a mano;
+- **non sovrascrive mai** `.env`, override e `secrets/`: di un `.env` esistente completa solo le chiavi mancanti, con i valori rilevati;
+- il firewall cambia solo con conferma o `--firewall`; con `--yes` resta invariato;
+- avvia solo lo stack `gigi-os`;
+- `--dry-run` non scrive nulla (verificato sulla cartella reale confrontando i file); `--no-start` prepara la configurazione senza build né avvio.
+**Scelta: immagini.** Il prefisso `GIGI_IMAGE_PREFIX` (vuoto = nomi locali di sempre) permette di usare `ghcr.io/<proprietario>/gigi-os{,-agent,-media}`. Il Dockerfile riceve `GIGI_VERSION` come argomento e dichiara licenza e versione nelle etichette OCI. Le immagini di base (node:22-alpine, node:22-trixie-slim, docker/compose-bin) esistono per amd64 e arm64 e non ci sono moduli nativi: la build arm64 si fa in CI con QEMU. In locale non è verificata, perché richiederebbe di installare binfmt/QEMU sull’host.
+**Scelta: GitHub.**
+- `ci.yml`: controllo dei tipi, test, `npm audit` delle dipendenze di produzione (soglia alta), build delle tre immagini e scansione Trivy (CRITICAL/HIGH con correzione disponibile).
+- `release.yml`: a ogni tag `vX.Y.Z`, build multi-architettura, push su GHCR con `GITHUB_TOKEN` e release con le note dal CHANGELOG.
+- Dependabot settimanale per npm, Docker e Actions.
+**Correzione collegata.** Il primo `npm audit` ha trovato una vulnerabilità alta e tre moderate in `@fastify/static` 8 (aggiramento delle protezioni delle route con percorsi non canonici) e una moderata in `uuid` tramite `dockerode` 4. Aggiornati a `@fastify/static` 10.1.6 e `dockerode` 5.0.1: 0 vulnerabilità, test verdi, lettura di container, statistiche, log e digest provata sul Docker reale.
+**Alternative scartate.** Installer `curl | sh` (si esegue codice non letto e senza la repo a portata di mano). Script in bash (meno portabile su Alpine e Debian minimale). Watchtower per gli aggiornamenti (vedi D-032).
+**Da rivedere se** serve un installer senza git (archivio della release) o il rilevamento automatico delle librerie da Jellyfin.

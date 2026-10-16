@@ -1,0 +1,49 @@
+# Test, controlli dei tipi e build delle immagini a ogni push e pull request (D-034). Nessuna pubblicazione.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      # Vulnerabilità note nelle dipendenze di produzione (soglia: alta)
+      - run: npm audit --omit=dev --audit-level=high
+
+  images:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        target: [runtime, agent, media]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.target }} (amd64, senza push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: false
+          load: true
+          tags: gigi-os-ci-${{ matrix.target }}:test
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Scansione vulnerabilità (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: gigi-os-ci-${{ matrix.target }}:test
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'

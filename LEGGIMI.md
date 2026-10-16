@@ -4,9 +4,30 @@ Control center self-hosted per **Gigi-Mini-Pc**: stato del server, container Doc
 
 GIGI OS gira in un proprio stack Docker (`gigi-os`). Le altre applicazioni (Jellyfin, Apollo, qBittorrent, Armony, Navidrome, Home Assistant) **non dipendono** da GIGI OS e continuano a funzionare quando è fermo.
 
+## Installazione
+
+Su un server Linux con Docker e Docker Compose v2:
+
+```sh
+git clone <repo> gigi-os && cd gigi-os
+sudo ./install.sh            # rileva IP, gruppi e fuso orario, poi chiede conferma
+sudo ./install.sh --dry-run  # mostra cosa farebbe, senza scrivere né avviare nulla
+```
+
+L'installer:
+- crea `.env` e `compose.override.yaml` e non li sovrascrive mai: se esistono, aggiunge solo le chiavi mancanti di `.env`;
+- genera chiave master e certificato;
+- trova le configurazioni di qBittorrent e Jellyfin da includere nei backup;
+- con UFW attivo, **chiede** prima di aggiungere la regola per la rete locale (`--firewall` per farlo senza domande, `--no-firewall` per non toccarlo);
+- avvia **solo** lo stack `gigi-os`.
+
+Al termine controlla in `.env` le cartelle delle librerie (`GIGI_MEDIA_LIBRARIES`). Altre opzioni: `--ip`, `--yes`, `--build`, `--no-start`.
+
+**Immagini già pronte:** con una release pubblicata, imposta nel `.env` `GIGI_IMAGE_PREFIX=ghcr.io/<proprietario>/` e `GIGI_VERSION=<versione>`. L'installer le scarica invece di costruirle (immagini per amd64 e arm64).
+
 ## Accesso
 
-- Indirizzo: **https://192.168.222.200:8470**, raggiungibile solo dalla LAN 192.168.222.0/24 (regola UFW `GIGI OS LAN`).
+- Indirizzo: **https://<GIGI_BIND>:8470** (su questo server https://192.168.222.200:8470), raggiungibile solo dalla rete locale (regola UFW `GIGI OS LAN`).
 - Il certificato è autofirmato e generato localmente. Al primo accesso il browser mostra un avviso. Confronta l'impronta SHA-256 con quella stampata da `scripts/init-secrets.sh` e accetta l'eccezione.
 - **Primo avvio:** serve il codice di setup monouso, leggibile con
   ```

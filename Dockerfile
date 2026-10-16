@@ -23,6 +23,7 @@ COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev --no-audit --no-fund -w apps/agent -w apps/api --include-workspace-root=false
 
 FROM node:22-alpine AS runtime
+ARG GIGI_VERSION=0.0.0
 ENV NODE_ENV=production NODE_NO_WARNINGS=1
 WORKDIR /app
 COPY --from=deps /src/node_modules ./node_modules
@@ -41,7 +42,10 @@ RUN apk add --no-cache iputils-ping iputils-tracepath
 # /run/gigi ospita i socket agent/media ↔ api: il volume nominato eredita questi permessi al primo avvio.
 RUN mkdir -p /run/gigi /data && chown node:node /run/gigi /data && chmod 750 /run/gigi
 USER node
-LABEL org.opencontainers.image.title="GIGI OS" org.opencontainers.image.version="0.2.0"
+LABEL org.opencontainers.image.title="GIGI OS" \
+      org.opencontainers.image.version="${GIGI_VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.description="Homelab control center self-hosted"
 CMD ["node", "apps/api/dist/index.js"]
 
 # Binario ufficiale di Docker Compose (Apache-2.0) per gli stack creati dal wizard (D-025).
@@ -50,6 +54,8 @@ FROM docker/compose-bin:v5.6.0 AS compose
 # Agent: Debian trixie per avere journalctl compatibile con il journal dell'host (systemd ≥ 257).
 # Dipendenze di produzione installate qui (glibc), non riusate dallo stage Alpine.
 FROM node:22-trixie-slim AS agent
+ARG GIGI_VERSION=0.0.0
+LABEL org.opencontainers.image.title="GIGI OS agent" org.opencontainers.image.version="${GIGI_VERSION}" org.opencontainers.image.licenses="AGPL-3.0-only"
 RUN apt-get update && apt-get install -y --no-install-recommends systemd && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production NODE_NO_WARNINGS=1
 WORKDIR /app

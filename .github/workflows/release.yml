@@ -1,0 +1,60 @@
+# Release: a ogni tag vX.Y.Z costruisce le immagini per amd64 e arm64 e le pubblica su GHCR (D-034).
+# Le immagini si chiamano ghcr.io/<proprietario>/gigi-os, gigi-os-agent e gigi-os-media; per usarle:
+# GIGI_IMAGE_PREFIX=ghcr.io/<proprietario>/ e GIGI_VERSION=X.Y.Z nel file .env.
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: write
+  packages: write
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: runtime
+            name: gigi-os
+          - target: agent
+            name: gigi-os-agent
+          - target: media
+            name: gigi-os-media
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: GIGI_VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  release:
+    runs-on: ubuntu-latest
+    needs: images
+    steps:
+      - uses: actions/checkout@v4
+      - name: Note della release dal CHANGELOG
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 ~ "^## \\[?"v"\\]?" {f=1; next} /^## / && f {exit} f' CHANGELOG.md > notes.md || true
+          [ -s notes.md ] || echo "Release $v" > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
