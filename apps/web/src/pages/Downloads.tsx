@@ -359,13 +359,31 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
   const [blocked, setBlocked] = useState<string[] | null>(null);
   const [force, setForce] = useState(false);
   const hashes = torrents.map((t) => t.hash);
+  // Anteprima: quali copie in libreria (stesso inode) spariranno con «Elimina ovunque»
+  const preview = useQuery({
+    queryKey: ['purge-plan', hashes.join(',')],
+    queryFn: () => api<{ torrents: { hash: string; name: string; library: { path: string; size: number }[] }[] }>('/downloads/purge-plan', { method: 'POST', body: { hashes } }),
+    enabled: isAdmin && mode === 'everywhere',
+    retry: false,
+  });
+  const libCopies = preview.data?.torrents.flatMap((t) => t.library) ?? [];
   const purge = useMutation({
-    mutationFn: () => api<{ torrentsDeleted: boolean; torrentError: string | null; libraryRemoved: string[]; skipped: { path: string; reason: string }[] }>('/downloads/purge', { method: 'POST', body: { hashes, confirm: typed } }),
+    mutationFn: () =>
+      api<{ torrentsDeleted: boolean; torrentError: string | null; libraryRemoved: string[]; skipped: { path: string; reason: string }[]; jellyfin: 'removed' | 'pending' | 'unconfigured' | 'unchanged' }>('/downloads/purge', {
+        method: 'POST',
+        body: { hashes, confirm: typed },
+      }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['resource', qb.id] });
       void qc.invalidateQueries({ queryKey: ['media-items'] });
       if (r.torrentError) toast('err', `Libreria ripulita, ma qBittorrent: ${r.torrentError}`);
-      else toast('ok', `Eliminato ovunque: ${torrents.length} torrent, ${r.libraryRemoved.length} file dalla libreria${r.skipped.length ? ` (${r.skipped.length} non toccati)` : ''}`);
+      else
+        toast(
+          'ok',
+          `Eliminato ovunque: ${torrents.length} torrent, ${r.libraryRemoved.length} file dalla libreria${r.skipped.length ? ` (${r.skipped.length} non toccati)` : ''}${
+            r.jellyfin === 'removed' ? '; sparito da Jellyfin e Apollo' : r.jellyfin === 'pending' ? '; Jellyfin sta aggiornando la libreria' : ''
+          }`,
+        );
       onClose();
     },
     onError: (e: Error) => toast('err', e.message),
@@ -388,7 +406,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
     );
   };
   const options: [typeof mode, string, string][] = [
-    ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e copia in libreria: il titolo sparisce anche da Jellyfin e Apollo e libera lo spazio.'] as [typeof mode, string, string],
+    ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e le loro copie in libreria: spariscono anche da Jellyfin e Apollo e lo spazio si libera.'] as [typeof mode, string, string],
     ['files', 'Elimina torrent e file scaricati', 'La copia già importata in libreria resta disponibile in Jellyfin.'] as [typeof mode, string, string],
     ['torrent', 'Rimuovi solo da qBittorrent', isAdmin ? 'Tutti i file restano dove sono.' : 'Tutti i file restano dove sono. Le eliminazioni dei file sono riservate agli amministratori.'] as [typeof mode, string, string],
   ].filter(([m]) => isAdmin || m === 'torrent');
@@ -421,6 +439,25 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
           </label>
         ))}
       </div>
+      {mode === 'everywhere' && (
+        <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
+          {preview.isPending && <span className="text-muted">Cerco le copie in libreria…</span>}
+          {preview.isError && <span className="text-warn">Impossibile controllare la libreria: {(preview.error as Error).message}</span>}
+          {preview.data && libCopies.length === 0 && (
+            <span className="text-fg-2">
+              <span className="font-medium">Nessuna copia in libreria.</span> Questo torrent non è nella libreria di Jellyfin: lì non cambia niente. Per togliere un titolo già in libreria usa Media → «Elimina dalla libreria».
+            </span>
+          )}
+          {libCopies.length > 0 && (
+            <>
+              <div className="font-medium text-fg-2">In libreria spariranno anche da Jellyfin e Apollo ({bytes(libCopies.reduce((n, l) => n + l.size, 0))}):</div>
+              <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto text-muted">
+                {libCopies.map((l) => <li key={l.path} className="truncate" title={l.path}>• {l.path.split('/').slice(-2).join('/')}</li>)}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
       {mode === 'everywhere' && (
         <div className="mt-3">
           <Field label="Operazione definitiva: per confermare scrivi ELIMINA" help="Vengono eliminati solo i file di libreria che sono lo stesso file del torrent (stesso inode).">

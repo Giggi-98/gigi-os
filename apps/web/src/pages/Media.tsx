@@ -1,10 +1,12 @@
-import { ArrowDown, ArrowUp, Clapperboard, Download, ExternalLink, Film, FolderOpen, Library, PlayCircle, Tv, Wand2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Clapperboard, Download, ExternalLink, Film, FolderOpen, Library, PlayCircle, Trash2, Tv, Wand2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, cx, Empty, ErrorBox, Input, Kv, Meter, PageHeader, Select, Skeleton, StatusBadge } from '../components/ui';
 import type { Integration } from '../lib/api';
 import { ago, bytes, eta, num, rate } from '../lib/format';
 import { byType, useIntegrations, useResource } from '../lib/queries';
+import { useAuth } from '../lib/auth';
+import { LibraryCard, LibraryDeleteDialog } from './LibraryDelete';
 
 type JfOverview = {
   serverName: string;
@@ -125,6 +127,8 @@ export function MediaPage() {
 function Jellyfin({ jf }: { jf: Integration }) {
   const o = useResource<JfOverview>(jf, 'overview', '', 30_000);
   const l = useResource<Latest[]>(jf, 'latest', 'limit=24', 60_000);
+  const { isAdmin } = useAuth();
+  const [deleting, setDeleting] = useState<string | null>(null);
   if (o.isError) return <ErrorBox error={o.error} />;
   if (!o.data) return <Skeleton className="h-48" />;
   const d = o.data;
@@ -201,8 +205,20 @@ function Jellyfin({ jf }: { jf: Integration }) {
           <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-3">
             {l.data.map((i) => (
               <figure key={i.id}>
-                <div className="aspect-[2/3] overflow-hidden rounded-lg bg-surface-3">
+                <div className="group relative aspect-[2/3] overflow-hidden rounded-lg bg-surface-3">
                   {i.imageItemId && <img src={`/api/v1/integrations/${jf.id}/jellyfin/image/${i.imageItemId}`} alt="" loading="lazy" className="size-full object-cover" />}
+                  {isAdmin && (
+                    <Button
+                      size="icon"
+                      variant="danger"
+                      className="absolute right-1.5 top-1.5 shadow [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100"
+                      onClick={() => setDeleting(i.id)}
+                      aria-label={`Elimina ${i.series ? `${i.series} · ${i.name}` : i.name} dalla libreria`}
+                      title="Elimina dalla libreria"
+                    >
+                      <Trash2 />
+                    </Button>
+                  )}
                 </div>
                 <figcaption className="mt-1.5">
                   <div className="truncate text-xs font-medium" title={i.series ?? i.name}>{i.series ?? i.name}</div>
@@ -215,6 +231,8 @@ function Jellyfin({ jf }: { jf: Integration }) {
           </div>
         )}
       </Card>
+      {isAdmin && <LibraryCard jf={jf} />}
+      {deleting && <LibraryDeleteDialog jfId={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # Cose da fare
 
-Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-037).
+Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-038).
 
 ## 1. Traduzioni (fase C, in corso — D-035)
 
@@ -9,7 +9,7 @@ Fatto: sistema di traduzione, parti comuni (menu, intestazione, componenti, rice
 Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.tsx`, conversione a mano delle frasi segnalate, aggiunta del file a `CONVERTED` in `tests/i18n.test.mjs`, traduzioni in `apps/web/src/i18n/en.json` (`node scripts/dev/i18n.mjs --missing`), screenshot nelle due lingue.
 
 - [ ] Sistema, Aggiornamenti, Rete, Docker (con Stack e Pulizia)
-- [ ] File, Media, Download, Media automation, Armony
+- [ ] File, Media (con «Elimina dalla libreria»), Download, Media automation, Armony
 - [ ] Automazioni (con Bot e digest), Integrazioni, Sicurezza, Backup, App
 - [ ] Testi che citano Apollo come se ci fosse sempre (es. «Disponibile in Jellyfin/Apollo»): mostrarli solo se l’integrazione esiste
 - [ ] API: messaggi d’errore nella lingua della richiesta (`Accept-Language`)
@@ -43,6 +43,7 @@ Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.
 - [ ] Launcher: riordino con trascinamento; link diretti ai titoli in Apollo (prima verificare il formato dei suoi link)
 - [ ] Aggiornamento di GIGI OS con un clic dall’interfaccia (oggi `sudo ./update.sh`, D-037); tag firmati e verifica delle immagini
 - [ ] Prima prova di `update.sh` su un server vero (provato solo in ambiente isolato con un `docker` finto)
+- [ ] Cestino: svuotamento automatico dopo N giorni e spazio occupato in evidenza (D-038)
 - [ ] Aggiornamenti: leggere `/run/reboot-required`; aggiornamento con un clic per gli stack autorizzati esplicitamente
 
 ## 5. Da guardare su questo server (Gigi-Mini-Pc)

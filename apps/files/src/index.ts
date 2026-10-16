@@ -67,6 +67,10 @@ const server = http.createServer(async (req, res) => {
       if (p === '/v1/restore') return send(res, 200, await files.restore(b.root, b.batch, b.name));
       if (p === '/v1/empty-trash') return send(res, 200, await files.emptyTrash(b.root, b.batch));
       if (p === '/v1/purge') return send(res, 200, await files.purge(b.root, b.items, b.stopAt));
+      if (p === '/v1/stat') return send(res, 200, await files.statPaths(b.paths));
+      if (p === '/v1/find-links') return send(res, 200, await files.findLinks(b.dirs, b.targets));
+      if (p === '/v1/media-plan') return send(res, 200, await files.mediaPlan(b.files, b.stops));
+      if (p === '/v1/media-delete') return send(res, 200, await files.mediaDelete(b.files, b.stops, b.mode, b.expect));
     }
     send(res, 404, { error: 'route sconosciuta' });
   } catch (e) {

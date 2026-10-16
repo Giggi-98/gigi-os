@@ -159,3 +159,58 @@ export async function jellyfinImage(ctx: ConnectorContext, itemId: string) {
   expectOk(r, 'Immagine');
   return { type: r.headers.get('content-type') ?? 'image/jpeg', body: r.body };
 }
+
+type FileItem = Item & { Path?: string; LocationType?: string; MediaSources?: { Path?: string }[] };
+const DELETABLE = new Set(['Movie', 'Series', 'Season', 'Episode', 'Video']);
+
+/** Un titolo con tutti i suoi file video (per una serie o una stagione: quelli di tutti gli episodi). */
+export async function jellyfinTitleFiles(ctx: ConnectorContext, id: string) {
+  if (!/^[0-9a-f]{32}$/i.test(id)) throw new ConnectorError('id non valido', 'error', 400);
+  const fields = 'Fields=Path,MediaSources,ProductionYear';
+  const r = await get<{ Items: FileItem[] }>(ctx, `/Items?Ids=${id}&Recursive=true&${fields}`, 'Titolo');
+  const it = r.Items[0];
+  if (!it) throw new ConnectorError('Titolo non trovato in Jellyfin', 'error', 404);
+  if (!DELETABLE.has(it.Type)) throw new ConnectorError(`Tipo «${it.Type}» non eliminabile da qui`, 'error', 400);
+  let videos: FileItem[] = [it];
+  if (it.Type === 'Series' || it.Type === 'Season') {
+    videos = (await get<{ Items: FileItem[] }>(ctx, `/Items?ParentId=${id}&Recursive=true&IncludeItemTypes=Episode,Video,Movie&Limit=5000&${fields}`, 'Episodi')).Items;
+  }
+  const paths = new Set<string>();
+  for (const v of videos) {
+    if (v.LocationType === 'Virtual') continue;
+    for (const p of [...(v.MediaSources ?? []).map((m) => m.Path), v.Path]) if (p?.startsWith('/')) paths.add(p);
+  }
+  return {
+    item: { id: it.Id, name: it.Name, type: it.Type, year: it.ProductionYear ?? null, seriesName: it.SeriesName ?? null, season: it.ParentIndexNumber ?? null, episode: it.IndexNumber ?? null },
+    episodes: it.Type === 'Series' || it.Type === 'Season' ? videos.filter((v) => v.LocationType !== 'Virtual').length : null,
+    paths: [...paths],
+  };
+}
+
+/** Cartelle delle librerie, come le vede Jellyfin. */
+export async function jellyfinLocations(ctx: ConnectorContext) {
+  const f = await get<{ Locations: string[] }[]>(ctx, '/Library/VirtualFolders', 'Librerie');
+  return f.flatMap((x) => x.Locations);
+}
+
+/** Quali di questi titoli Jellyfin ha ancora. */
+export async function jellyfinExisting(ctx: ConnectorContext, ids: string[]) {
+  const ok = ids.filter((i) => /^[0-9a-f]{32}$/i.test(i));
+  if (!ok.length) return [];
+  return (await get<{ Items: { Id: string }[] }>(ctx, `/Items?Ids=${ok.join(',')}&Recursive=true`, 'Verifica')).Items.map((i) => i.Id);
+}
+
+/** Avvisa Jellyfin che dei percorsi sono stati eliminati; con `full` avvia anche la scansione delle librerie. */
+export async function jellyfinNotifyDeleted(ctx: ConnectorContext, paths: string[], full = false) {
+  if (paths.length) {
+    expectOk(
+      await ctx.http('/Library/Media/Updated', {
+        method: 'POST',
+        headers: { ...headers(ctx), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Updates: paths.map((Path) => ({ Path, UpdateType: 'Deleted' })) }),
+      }),
+      'Notifica a Jellyfin',
+    );
+  }
+  if (full) expectOk(await ctx.http('/Library/Refresh', { method: 'POST', headers: headers(ctx) }), 'Scansione Jellyfin');
+}

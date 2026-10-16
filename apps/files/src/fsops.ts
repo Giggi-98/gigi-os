@@ -14,6 +14,8 @@ export class FsError extends Error {
 
 export type Root = { id: string; label: string; path: string };
 export const TRASH = '.gigi-trash';
+/** Accessori di un video che se ne vanno con lui: sottotitoli, .nfo, immagini. */
+const SIDECAR = /\.(srt|ass|ssa|sub|idx|vtt|sup|smi|nfo|jpe?g|png|webp|tbn)$/i;
 const COPY_MAX = Number(process.env.GIGI_FILES_COPY_MAX ?? 4 * 1024 ** 3);
 
 export function parseRoots(spec: string): Root[] {
@@ -194,7 +196,9 @@ export class Files {
     for (const it of list) {
       const src = await this.resolve(rootId, it);
       if (!src.rel || src.rel === TRASH || src.rel.startsWith(TRASH + '/')) throw new FsError('Elemento non eliminabile');
-      const name = path.basename(src.abs);
+      let name = path.basename(src.abs);
+      // Due elementi con lo stesso nome nello stesso lotto: il secondo diventa «nome (2)»
+      for (let n = 2; moved.some((m) => m.name === name); n++) name = `${path.basename(src.abs)} (${n})`;
       await rename(src.abs, path.join(bin, name)).catch((e: NodeJS.ErrnoException) => this.fail(e));
       moved.push({ from: src.rel, name });
     }
@@ -304,6 +308,203 @@ export class Files {
     }
     void root;
     return { removed, skipped };
+  }
+
+  /** Percorso assoluto → radice che lo contiene (con le stesse verifiche di resolve). */
+  async locate(abs: unknown) {
+    if (typeof abs !== 'string' || !path.isAbsolute(abs)) throw new FsError('Percorso non valido');
+    const p = path.resolve(abs);
+    const root = [...this.roots].sort((a, b) => b.path.length - a.path.length).find((r) => p === r.path || p.startsWith(r.path + path.sep));
+    if (!root) throw new FsError(`Fuori dalle cartelle gestite: ${p}`, 403);
+    return this.resolve(root.id, path.relative(root.path, p));
+  }
+
+  /** Inode di più file (per riconoscere gli hardlink tra download e libreria). */
+  async statPaths(paths: unknown) {
+    const list = Array.isArray(paths) ? paths : [];
+    if (list.length > 5000) throw new FsError('Troppi percorsi');
+    const out: { path: string; ino?: number; dev?: number; nlink?: number; size?: number; error?: string }[] = [];
+    for (const p of list) {
+      try {
+        const loc = await this.locate(p);
+        const st = await lstat(loc.abs);
+        if (!st.isFile()) out.push({ path: String(p), error: 'non è un file' });
+        else out.push({ path: loc.abs, ino: st.ino, dev: st.dev, nlink: st.nlink, size: st.size });
+      } catch (e) {
+        out.push({ path: String(p), error: (e as Error).message });
+      }
+    }
+    return out;
+  }
+
+  /** File regolari nelle cartelle indicate che hanno uno degli inode cercati (copie hardlink di un download). */
+  async findLinks(dirs: unknown, targets: unknown) {
+    const want = new Set((Array.isArray(targets) ? targets : []).map((t: { ino?: unknown; dev?: unknown }) => `${t.dev}:${t.ino}`));
+    const found: { path: string; ino: number; dev: number; size: number }[] = [];
+    if (!want.size) return found;
+    let visited = 0;
+    const walk = async (abs: string, depth: number) => {
+      if (depth > 10 || visited > 200_000) return;
+      let ents;
+      try {
+        ents = await readdir(abs, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of ents) {
+        if (e.name === TRASH || ++visited > 200_000) continue;
+        const p = path.join(abs, e.name);
+        if (e.isDirectory()) await walk(p, depth + 1);
+        else if (e.isFile()) {
+          const st = await lstat(p).catch(() => null);
+          if (st && st.nlink > 1 && want.has(`${st.dev}:${st.ino}`)) found.push({ path: p, ino: st.ino, dev: st.dev, size: st.size });
+        }
+      }
+    };
+    for (const d of Array.isArray(dirs) ? dirs.slice(0, 50) : []) {
+      try {
+        await walk((await this.locate(d)).abs, 0);
+      } catch {}
+    }
+    return found;
+  }
+
+  /**
+   * Cosa comporta togliere dalla libreria i file video indicati: i file, i loro accessori con lo stesso nome
+   * (sottotitoli, .nfo, immagini) e le cartelle che resterebbero vuote o con soli accessori, fino alla cartella
+   * della libreria (`stops`) esclusa. Niente viene toccato.
+   */
+  async mediaPlan(files: unknown, stops: unknown) {
+    const list = Array.isArray(files) ? files : [];
+    if (!list.length || list.length > 2000) throw new FsError('Da 1 a 2000 file');
+    const stopAbs: string[] = [];
+    // Le librerie fuori dalle radici (es. le collezioni di Jellyfin nella sua configurazione) non contano
+    for (const s of Array.isArray(stops) ? stops : []) {
+      const loc = await this.locate(s).catch(() => null);
+      if (loc) stopAbs.push(loc.abs);
+    }
+    const videos: { path: string; size: number; ino: number; dev: number; nlink: number }[] = [];
+    const sidecars: { path: string; size: number }[] = [];
+    const skipped: { path: string; reason: string }[] = [];
+    const planned = new Set<string>();
+    const stopOf = new Map<string, string>();
+    for (const f of list) {
+      let loc;
+      try {
+        loc = await this.locate(f);
+      } catch (e) {
+        skipped.push({ path: String(f), reason: (e as Error).message });
+        continue;
+      }
+      const stop = stopAbs.find((s) => loc.abs.startsWith(s + path.sep));
+      if (!stop) {
+        skipped.push({ path: loc.abs, reason: 'fuori dalle cartelle delle librerie' });
+        continue;
+      }
+      const st = await lstat(loc.abs).catch(() => null);
+      if (!st?.isFile()) {
+        skipped.push({ path: loc.abs, reason: st ? 'non è un file' : 'file già assente' });
+        continue;
+      }
+      if (planned.has(loc.abs)) continue;
+      videos.push({ path: loc.abs, size: st.size, ino: st.ino, dev: st.dev, nlink: st.nlink });
+      planned.add(loc.abs);
+      const dir = path.dirname(loc.abs);
+      stopOf.set(dir, stop);
+      const stem = path.basename(loc.abs, path.extname(loc.abs));
+      for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        const p = path.join(dir, e.name);
+        if (!e.isFile() || planned.has(p) || !SIDECAR.test(e.name)) continue;
+        if (!(e.name.startsWith(stem + '.') || e.name.startsWith(stem + '-'))) continue;
+        const ss = await lstat(p);
+        sidecars.push({ path: p, size: ss.size });
+        planned.add(p);
+      }
+    }
+    // Cartelle che restano vuote o con soli accessori: si tolgono anche loro (mai la cartella della libreria)
+    const memo = new Map<string, boolean>();
+    const extras: { path: string; size: number }[] = [];
+    const emptyable = async (dir: string, depth: number): Promise<boolean> => {
+      if (memo.has(dir)) return memo.get(dir)!;
+      let ok = depth < 4;
+      const mine: { path: string; size: number }[] = [];
+      const ents = ok ? await readdir(dir, { withFileTypes: true }).catch(() => null) : null;
+      if (!ents || ents.length > 2000) ok = false;
+      for (const e of ents ?? []) {
+        if (!ok) break;
+        const p = path.join(dir, e.name);
+        if (planned.has(p)) continue;
+        if (e.isFile() && SIDECAR.test(e.name)) mine.push({ path: p, size: (await lstat(p)).size });
+        else if (e.isDirectory()) ok = await emptyable(p, depth + 1);
+        else ok = false;
+      }
+      memo.set(dir, ok);
+      if (ok) extras.push(...mine);
+      return ok;
+    };
+    const tops = new Set<string>();
+    for (const [dir, stop] of stopOf) {
+      let top: string | null = null;
+      for (let d = dir; d.startsWith(stop + path.sep); d = path.dirname(d)) {
+        if (!(await emptyable(d, 0))) break;
+        top = d;
+      }
+      if (top) tops.add(top);
+    }
+    // Una cartella dentro un'altra già da togliere non va elencata due volte
+    const dirs = [...tops].filter((d) => ![...tops].some((o) => o !== d && d.startsWith(o + path.sep)));
+    const extraIn = extras.filter((x) => dirs.some((d) => x.path.startsWith(d + path.sep)));
+    const all = [...videos, ...sidecars, ...extraIn];
+    return {
+      videos,
+      sidecars,
+      extras: extraIn,
+      dirs,
+      skipped,
+      size: all.reduce((n, f) => n + f.size, 0),
+      // Spazio liberato davvero: i file con altri hardlink (es. il torrent in seeding) restano sul disco
+      freed: videos.filter((v) => v.nlink === 1).reduce((n, f) => n + f.size, 0) + [...sidecars, ...extraIn].reduce((n, f) => n + f.size, 0),
+    };
+  }
+
+  /**
+   * Esegue mediaPlan: `trash` sposta nel cestino della radice (ripristinabile), `delete` elimina definitivamente.
+   * `expect` (inode visti nell'anteprima) blocca tutto se nel frattempo un file è stato sostituito.
+   */
+  async mediaDelete(files: unknown, stops: unknown, mode: unknown, expect: unknown) {
+    if (mode !== 'trash' && mode !== 'delete') throw new FsError('Modalità non valida');
+    const plan = await this.mediaPlan(files, stops);
+    if (!plan.videos.length) throw new FsError('Nessun file da eliminare', 404);
+    const seen = new Map((Array.isArray(expect) ? expect : []).map((e: { path?: unknown; ino?: unknown; dev?: unknown }) => [String(e.path), `${e.dev}:${e.ino}`]));
+    for (const v of plan.videos) {
+      const e = seen.get(v.path);
+      if (e && e !== `${v.dev}:${v.ino}`) throw new FsError(`${path.basename(v.path)} è cambiato dopo l’anteprima: riaprila`, 409);
+    }
+    const inDir = (p: string) => plan.dirs.some((d) => p.startsWith(d + path.sep));
+    const loose = [...plan.videos, ...plan.sidecars].map((f) => f.path).filter((p) => !inDir(p));
+    const batches: { root: string; batch: string }[] = [];
+    if (mode === 'trash') {
+      const byRoot = new Map<string, string[]>();
+      for (const p of [...plan.dirs, ...loose]) {
+        const loc = await this.locate(p);
+        byRoot.set(loc.root.id, [...(byRoot.get(loc.root.id) ?? []), loc.rel]);
+      }
+      for (const [root, rels] of byRoot) {
+        const r = await this.trash(root, rels);
+        batches.push({ root, batch: r.batch });
+      }
+    } else {
+      for (const f of [...plan.videos, ...plan.sidecars, ...plan.extras]) await rm(f.path).catch((e: NodeJS.ErrnoException) => this.fail(e));
+      // Cartelle: solo rmdir, che fallisce se dentro è comparso qualcosa nel frattempo
+      const all: string[] = [];
+      const collect = async (d: string) => {
+        for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) if (e.isDirectory()) await collect(path.join(d, e.name));
+        all.push(d);
+      };
+      for (const d of plan.dirs) await collect(d);
+      for (const d of all) await rmdir(d).catch(() => undefined);
+    }
+    return { ...plan, mode, batches };
   }
 
   async search(rootId: unknown, rel: unknown, q: unknown) {

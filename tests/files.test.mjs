@@ -121,3 +121,88 @@ test('elimina ovunque: solo lo stesso file del torrent, pulizia cartelle fino al
   assert.ok(existsSync(lib), 'la cartella della libreria resta');
   assert.ok(existsSync(path.join(dl, 'src-ep.mkv')), 'il download lo elimina qBittorrent, non il file manager');
 });
+
+// D-038: «Elimina dalla libreria» e copie in libreria di un torrent
+function movieFixture(name) {
+  const lib = path.join(media, 'Film');
+  const dir = path.join(lib, name);
+  mkdirSync(path.join(dir, 'Subs'), { recursive: true });
+  writeFileSync(path.join(dl, `${name}.mkv`), 'film');
+  linkSync(path.join(dl, `${name}.mkv`), path.join(dir, `${name}.mkv`));
+  writeFileSync(path.join(dir, `${name}.it.srt`), 'sub');
+  writeFileSync(path.join(dir, `${name}-poster.jpg`), 'img');
+  writeFileSync(path.join(dir, 'movie.nfo'), 'nfo');
+  writeFileSync(path.join(dir, 'Subs', 'eng.srt'), 'sub');
+  return { lib, dir, video: path.join(dir, `${name}.mkv`) };
+}
+
+test('anteprima: video, accessori, cartella che resta vuota; niente toccato', async () => {
+  const { lib, dir, video } = movieFixture('Film A (2001)');
+  const p = await f.mediaPlan([video, path.join(outside, 'password.txt'), path.join(dl, 'note.txt')], [lib, outside, '/config/data/collections']);
+  assert.deepEqual(p.videos.map((v) => v.path), [video]);
+  assert.equal(p.videos[0].nlink, 2, 'hardlink con il download');
+  assert.deepEqual(p.sidecars.map((s) => path.basename(s.path)).sort(), ['Film A (2001)-poster.jpg', 'Film A (2001).it.srt']);
+  assert.deepEqual(p.extras.map((s) => path.basename(s.path)).sort(), ['eng.srt', 'movie.nfo']);
+  assert.deepEqual(p.dirs, [dir]);
+  assert.equal(p.skipped.length, 2, 'fuori dalle radici e fuori dalle librerie');
+  assert.equal(p.freed, 3 + 3 + 3 + 3, 'il video condiviso con il torrent non libera spazio');
+  assert.ok(existsSync(video));
+});
+
+test('una cartella con altri video resta: si toglie solo il file scelto', async () => {
+  const lib = path.join(media, 'Serie');
+  const season = path.join(lib, 'Show', 'Season 01');
+  mkdirSync(season, { recursive: true });
+  writeFileSync(path.join(season, 'Show - S01E01.mkv'), 'e1');
+  writeFileSync(path.join(season, 'Show - S01E01.srt'), 's1');
+  writeFileSync(path.join(season, 'Show - S01E01-E02.mkv'), 'doppio');
+  writeFileSync(path.join(lib, 'Show', 'tvshow.nfo'), 'nfo');
+  const p = await f.mediaPlan([path.join(season, 'Show - S01E01.mkv')], [lib]);
+  assert.deepEqual(p.sidecars.map((s) => path.basename(s.path)), ['Show - S01E01.srt'], 'S01E01-E02 è un video, non un accessorio');
+  assert.deepEqual(p.dirs, []);
+  const r = await f.mediaDelete([path.join(season, 'Show - S01E01.mkv')], [lib], 'delete', []);
+  assert.equal(r.videos.length, 1);
+  assert.ok(!existsSync(path.join(season, 'Show - S01E01.mkv')) && !existsSync(path.join(season, 'Show - S01E01.srt')));
+  assert.ok(existsSync(path.join(season, 'Show - S01E01-E02.mkv')) && existsSync(path.join(lib, 'Show', 'tvshow.nfo')));
+  // Ultimo episodio: va via tutta la serie, accessori compresi, ma mai la cartella della libreria
+  await f.mediaDelete([path.join(season, 'Show - S01E01-E02.mkv')], [lib], 'delete', []);
+  assert.ok(!existsSync(path.join(lib, 'Show')));
+  assert.ok(existsSync(lib));
+});
+
+test('cestino: la cartella del film intera, ripristinabile; inode cambiato = stop', async () => {
+  const { lib, dir, video } = movieFixture('Film B (2002)');
+  const st = statSync(video);
+  await assert.rejects(f.mediaDelete([video], [lib], 'trash', [{ path: video, ino: st.ino + 1, dev: st.dev }]), (e) => e.status === 409);
+  assert.ok(existsSync(video), 'nessuna modifica se il file è cambiato');
+  const r = await f.mediaDelete([video], [lib], 'trash', [{ path: video, ino: st.ino, dev: st.dev }]);
+  assert.equal(r.batches.length, 1);
+  assert.ok(!existsSync(dir));
+  assert.ok(existsSync(path.join(dl, 'Film B (2002).mkv')), 'il download resta');
+  const t = await f.trashList('media');
+  const b = t.find((x) => x.batch === r.batches[0].batch);
+  assert.deepEqual(b.items.map((i) => i.from), ['Film/Film B (2002)']);
+  await f.restore('media', r.batches[0].batch, 'Film B (2002)');
+  assert.ok(existsSync(video) && existsSync(path.join(dir, 'Subs', 'eng.srt')));
+});
+
+test('copie in libreria di un download: per inode, solo nelle cartelle indicate', async () => {
+  const { lib, video } = movieFixture('Film C (2003)');
+  const [src] = await f.statPaths([path.join(dl, 'Film C (2003).mkv')]);
+  assert.equal(src.nlink, 2);
+  const found = await f.findLinks([lib], [{ ino: src.ino, dev: src.dev }]);
+  assert.deepEqual(found.map((x) => x.path), [video]);
+  assert.deepEqual(await f.findLinks([path.join(media, 'Serie')], [{ ino: src.ino, dev: src.dev }]), []);
+  const out = await f.statPaths([path.join(outside, 'password.txt')]);
+  assert.match(out[0].error, /Fuori dalle cartelle gestite/);
+});
+
+test('cestino: due elementi con lo stesso nome non si sovrascrivono', async () => {
+  mkdirSync(path.join(media, 'X'), { recursive: true });
+  mkdirSync(path.join(media, 'Y'), { recursive: true });
+  writeFileSync(path.join(media, 'X', 'same.txt'), 'x');
+  writeFileSync(path.join(media, 'Y', 'same.txt'), 'y');
+  const r = await f.trash('media', ['X/same.txt', 'Y/same.txt']);
+  const b = (await f.trashList('media')).find((x) => x.batch === r.batch);
+  assert.deepEqual(b.items.map((i) => i.name).sort(), ['same.txt', 'same.txt (2)']);
+});

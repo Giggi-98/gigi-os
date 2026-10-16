@@ -24,7 +24,10 @@ const INLINE: Record<string, string> = {
   '.pdf': 'application/pdf',
 };
 
-export function registerFiles(app: FastifyInstance, socketPath: string, audit: Audit, admin: object) {
+/** Avvisi verso le librerie (Jellyfin) quando il file manager toglie o rimette dei file. */
+export type LibraryHooks = { removed(absPaths: string[]): Promise<unknown>; restored(): Promise<unknown> };
+
+export function registerFiles(app: FastifyInstance, socketPath: string, audit: Audit, admin: object, hooks?: LibraryHooks) {
   const call = (method: string, p: string, opts: { body?: unknown; stream?: Readable; headers?: Record<string, string> } = {}) =>
     new Promise<http.IncomingMessage>((resolve, reject) => {
       const data = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
@@ -45,6 +48,11 @@ export function registerFiles(app: FastifyInstance, socketPath: string, audit: A
       else req.end(data);
     });
 
+  const text = async (res: http.IncomingMessage) => {
+    const chunks: Buffer[] = [];
+    for await (const c of res) chunks.push(c as Buffer);
+    return Buffer.concat(chunks).toString('utf8');
+  };
   const json = async (reply: FastifyReply, res: http.IncomingMessage) => {
     const chunks: Buffer[] = [];
     for await (const c of res) chunks.push(c as Buffer);
@@ -106,9 +114,19 @@ export function registerFiles(app: FastifyInstance, socketPath: string, audit: A
       const denied = guard?.(b);
       if (denied) return reply.code(400).send({ error: denied });
       const res = await call('POST', `/v1/${route}`, { body: b });
-      audit.log(req, action, (res.statusCode ?? 500) < 400 ? 'ok' : 'error', target(b), { ...b, root: undefined });
+      const ok = (res.statusCode ?? 500) < 400;
+      audit.log(req, action, ok ? 'ok' : 'error', target(b), { ...b, root: undefined });
+      if (ok && hooks && (route === 'trash' || route === 'restore')) void notify(route, b).catch(() => undefined);
       return json(reply, res);
     });
+  const notify = async (route: string, b: Record<string, unknown>) => {
+    if (route === 'restore') return hooks!.restored();
+    const r = await call('GET', '/v1/roots');
+    const roots = JSON.parse(await text(r)) as { id: string; path: string }[];
+    const root = roots.find((x) => x.id === b.root);
+    if (!root || !Array.isArray(b.items)) return;
+    return hooks!.removed((b.items as unknown[]).filter((i): i is string => typeof i === 'string').map((i) => path.posix.join(root.path, i)));
+  };
 
   const where = (b: Record<string, unknown>) => `${b.root}:${b.path ?? ''}`;
   mutation('mkdir', 'files.mkdir', (b) => `${where(b)}/${b.name}`);

@@ -744,7 +744,10 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   });
 
   d.media?.register(app, audit, viewer, admin, operator);
-  if (d.filesSocket) registerFiles(app, d.filesSocket, audit, admin);
+  if (d.filesSocket) {
+    const m = d.media;
+    registerFiles(app, d.filesSocket, audit, admin, m ? { removed: (p) => m.libraryRemoved(p), restored: () => m.libraryRescan() } : undefined);
+  }
   if (d.automations) registerAutomations(app, d.automations, events, audit, viewer, admin);
   if (d.backups) registerBackups(app, d.backups, audit, admin);
   registerStacks(app, agent, audit, events, viewer, admin);

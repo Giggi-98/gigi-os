@@ -372,3 +372,16 @@ export const qbittorrent: ConnectorDef = {
     },
   },
 };
+
+/** Tutti i torrent con i loro file, con i percorsi visti da qBittorrent (per riconoscere gli hardlink in libreria). */
+export async function qbtTorrentFiles(ctx: ConnectorContext, only?: string[]) {
+  const q = only?.length ? `?hashes=${only.map((h) => h.toLowerCase()).join('|')}` : '';
+  const list = json<Torrent[]>(await call(ctx, `/api/v2/torrents/info${q}`, 'Torrent'));
+  const out: { hash: string; name: string; files: { path: string; size: number }[] }[] = [];
+  for (const t of list.slice(0, 500)) {
+    const files = json<{ name: string; size: number }[]>(await call(ctx, `/api/v2/torrents/files?hash=${t.hash}`, 'File del torrent'));
+    const base = t.save_path.replace(/\/+$/, '');
+    out.push({ hash: t.hash, name: t.name, files: files.map((f) => ({ path: `${base}/${f.name}`, size: f.size })) });
+  }
+  return out;
+}
