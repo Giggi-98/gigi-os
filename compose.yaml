@@ -50,6 +50,10 @@ services:
       - /usr/lib/systemd/system:/host/units/lib:ro
       - /var/log/journal:/var/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
+      # Aggiornamenti del sistema operativo (D-032), sola lettura: riepilogo di update-notifier, timestamp di apt, kernel installati
+      - /var/lib/update-notifier:/host/update-notifier:ro
+      - /var/lib/apt/periodic:/host/apt-periodic:ro
+      - /boot:/host/boot:ro
       # Stack creati dal wizard: stesso percorso dell'host, così ./data nel compose diventa /opt/stacks/<nome>/data
       - /opt/stacks:/opt/stacks
 
@@ -80,6 +84,9 @@ services:
       GIGI_METRICS_DAYS: ${GIGI_METRICS_DAYS:-30}
       # Fuso orario per gli orari scelti dall'utente (backup, ore di silenzio, digest): senza, il container usa UTC
       TZ: ${GIGI_TZ:-Europe/Rome}
+      # Versione in uso e repo GitHub delle release per il controllo aggiornamenti di GIGI OS (vuoto = nessun controllo)
+      GIGI_VERSION: ${GIGI_VERSION:-0.2.0}
+      GIGI_RELEASE_REPO: ${GIGI_RELEASE_REPO:-}
       GIGI_BACKUP_DIR: /backups
       GIGI_BACKUP_EXTRA: env=/backup-src/.env,compose.yaml=/backup-src/compose.yaml
     volumes:

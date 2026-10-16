@@ -20,6 +20,7 @@ import {
   DatabaseBackup,
   Download,
   LayoutGrid,
+  CircleArrowUp,
   Search,
   X,
 } from 'lucide-react';
@@ -45,6 +46,7 @@ export const NAV: { group: string; items: Item[] }[] = [
     group: 'Infrastruttura',
     items: [
       { to: '/sistema', label: 'Sistema', icon: <Server /> },
+      { to: '/aggiornamenti', label: 'Aggiornamenti', icon: <CircleArrowUp /> },
       { to: '/rete', label: 'Rete', icon: <Network /> },
       { to: '/docker', label: 'Docker', icon: <Boxes /> },
       { to: '/file', label: 'File', icon: <FolderTree /> },

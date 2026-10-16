@@ -78,6 +78,8 @@ export class Digest {
     private integrations: Pick<Integrations, 'list'>,
     private media: Pick<MediaBridge, 'items'> | null,
     private now = () => new Date(),
+    /** Riepilogo dell'ultimo controllo aggiornamenti (D-032), se disponibile. */
+    private updates: { summary: () => string | null } | null = null,
   ) {}
 
   settings(): DigestSettings {
@@ -168,6 +170,9 @@ export class Digest {
       const ram = this.metrics.containers('7d', 'mem', 3).ranking.slice(0, 3);
       if (ram.length) lines.push(`🧠 RAM media: ${ram.map((r) => `${r.name} ${bytes(r.memAvg)}`).join(', ')}`);
     }
+
+    const upd = this.updates?.summary();
+    if (upd) lines.push(upd);
 
     // Integrazioni non raggiungibili ora
     const off = this.integrations.list().filter((i) => i.enabled && ['offline', 'error', 'unauthorized'].includes(i.status ?? '')).map((i) => i.name);

@@ -25,6 +25,7 @@ import { MediaAutomationPage } from './pages/MediaAutomation';
 import { SecurityPage } from './pages/Security';
 import { SystemPage } from './pages/System';
 import { UpcomingPage } from './pages/Upcoming';
+import { UpdatesPage } from './pages/Updates';
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -52,6 +53,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="app" element={<AppsPage />} />
         <Route path="sistema" element={<SystemPage />} />
+        <Route path="aggiornamenti" element={<UpdatesPage />} />
         <Route path="rete" element={<NetworkPage />} />
         <Route path="docker" element={<DockerPage />} />
         <Route path="media" element={<MediaPage />} />

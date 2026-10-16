@@ -14,6 +14,7 @@ import { Mfa } from './mfa.js';
 import { Launcher } from './launcher.js';
 import { TelegramBot } from './telegram.js';
 import { Digest } from './digest.js';
+import { Updates } from './updates.js';
 import { MFA_REQUIRED } from './mfa.js';
 import { Automations, watchDownloads } from './automations.js';
 import { Backups } from './backup.js';
@@ -36,6 +37,7 @@ async function main() {
   const audit = new Audit(db);
   const automations = new Automations(db, vault, integrations, buildBlockList(config.allowedTargets), buildBlockList, (m, e) => log('warn', m, e ?? {}));
   automations.seedRules();
+  automations.ensurePresets();
   // Solo per i test con un finto server Telegram locale: in produzione non va impostata
   if (process.env.GIGI_TELEGRAM_API) automations.telegramBase = validateUrl(process.env.GIGI_TELEGRAM_API).origin;
   events.onAdd = (e) => automations.onEvent(e);
@@ -62,7 +64,9 @@ async function main() {
   metrics.start((m, e) => log('warn', m, e ?? {}));
   const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events, new AgentClient(config.filesSocket, 'File manager'));
   const warn = (m: string, e?: object) => log('warn', m, e ?? {});
-  const digest = new Digest(db, automations, metrics, agent, integrations, media);
+  const updates = new Updates(db, agent, integrations, events, { version: config.version, releaseRepo: config.releaseRepo, stackRoots: config.stackRoots });
+  updates.start(warn);
+  const digest = new Digest(db, automations, metrics, agent, integrations, media, undefined, updates);
   digest.start(warn);
   const bot = new TelegramBot({
     db,
@@ -117,6 +121,7 @@ async function main() {
     launcher,
     bot,
     digest,
+    updates,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

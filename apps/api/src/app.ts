@@ -20,6 +20,7 @@ import type { Mfa } from './mfa.js';
 import type { Launcher } from './launcher.js';
 import type { TelegramBot } from './telegram.js';
 import type { Digest } from './digest.js';
+import type { Updates } from './updates.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -50,6 +51,7 @@ export type Deps = {
   launcher?: Launcher;
   bot?: TelegramBot;
   digest?: Digest;
+  updates?: Updates;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

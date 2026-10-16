@@ -30,8 +30,12 @@ import { StacksTab } from './DockerStacks';
 
 type Tab = 'containers' | 'stacks' | 'images' | 'volumes' | 'networks' | 'space';
 
+const TABS: Tab[] = ['containers', 'stacks', 'images', 'volumes', 'networks', 'space'];
+
 export function DockerPage() {
-  const [tab, setTab] = useState<Tab>('containers');
+  // ?tab=stacks apre direttamente una scheda (es. dalla pagina Aggiornamenti)
+  const [search] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (TABS as string[]).includes(search.get('tab') ?? '') ? (search.get('tab') as Tab) : 'containers');
   const containers = useContainers();
   const info = useQuery({ queryKey: ['docker-info'], queryFn: () => api<{ version: string; running: number; containers: number; images: number; loggingDriver: string; storageDriver: string }>('/docker/info'), staleTime: 60_000 });
   return (

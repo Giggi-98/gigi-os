@@ -20,6 +20,7 @@ import { diskUsage, pruneBuildCache, removeContainer, removeImage, removeNetwork
 import { browse, deploy, getJob, getStack, listStacks, preflight, ROOTS, stackAction, type StackAction } from './stacks.js';
 import { getHistory, getSnapshot, startSampler } from './system.js';
 import { firewallBlocked, listServices, serviceDetail, serviceJournal, systemErrors } from './systemd.js';
+import { hostUpdates, imageUpdates } from './updates.js';
 
 const SOCKET = process.env.GIGI_AGENT_SOCKET ?? '/run/gigi/agent.sock';
 const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.@:-]{0,199}$/;
@@ -63,6 +64,9 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/v1\/journal\/errors$/, async (_q, res, _p, q) => send(res, 200, await systemErrors(Number(q.get('hours') ?? 24) || 24))],
   ['GET', /^\/v1\/firewall\/blocked$/, async (_q, res, _p, q) => send(res, 200, await firewallBlocked(Number(q.get('hours') ?? 24) || 24))],
   ['GET', /^\/v1\/docker\/info$/, async (_q, res) => send(res, 200, await engineInfo())],
+  // Aggiornamenti (D-032): sola lettura
+  ['GET', /^\/v1\/updates\/images$/, async (_q, res) => send(res, 200, await imageUpdates())],
+  ['GET', /^\/v1\/updates\/host$/, async (_q, res) => send(res, 200, await hostUpdates())],
   ['GET', /^\/v1\/containers$/, async (_q, res) => send(res, 200, await listContainers())],
   ['GET', /^\/v1\/containers\/([^/]+)$/, async (_q, res, p) => send(res, 200, await inspectContainer(p[0]))],
   [

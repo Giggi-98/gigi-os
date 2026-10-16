@@ -99,6 +99,14 @@ export const homeassistant: ConnectorDef = {
         domains,
       };
     },
+    /** Entità update.* con un aggiornamento disponibile (Core, Supervisor, add-on, firmware dei dispositivi). Sola lettura. */
+    async updates(ctx) {
+      const r = await ctx.http('/api/states', { headers: { Authorization: `Bearer ${ctx.secret.token}` }, maxBytes: 20 * 1024 * 1024 });
+      const states = json<{ entity_id: string; state: string; attributes?: { friendly_name?: string; title?: string; installed_version?: string; latest_version?: string; skipped_version?: string | null } }[]>(expectOk(r, 'Stati'));
+      return states
+        .filter((s) => s.entity_id.startsWith('update.') && s.state === 'on')
+        .map((s) => ({ entity: s.entity_id, title: s.attributes?.title || s.attributes?.friendly_name || s.entity_id, installed: s.attributes?.installed_version ?? null, latest: s.attributes?.latest_version ?? null }));
+    },
     /** Servizi notify.* disponibili (es. notify.mobile_app_telefono) per il canale di notifica. */
     async notify(ctx) {
       const r = await ctx.http('/api/services', { headers: { Authorization: `Bearer ${ctx.secret.token}` }, maxBytes: 10 * 1024 * 1024 });

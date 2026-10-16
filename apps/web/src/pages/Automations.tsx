@@ -12,7 +12,7 @@ type Channel = { id: string; type: 'homeassistant' | 'ntfy' | 'telegram' | 'webh
 type Rule = { id: string; name: string; enabled: boolean; sources: string[]; minLevel: 'info' | 'warning' | 'error'; matchText: string | null; channels: string[]; throttleMin: number; quietFrom: string | null; quietTo: string | null };
 type Sent = { id: number; ts: number; rule_name: string | null; channel: string | null; title: string; status: 'sent' | 'failed' | 'throttled' | 'quiet'; error: string | null };
 
-const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', sistema: 'Sistema', rete: 'Rete', integrazioni: 'Integrazioni', media: 'Media', download: 'Download', backup: 'Backup', sicurezza: 'Sicurezza' };
+const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', sistema: 'Sistema', rete: 'Rete', integrazioni: 'Integrazioni', media: 'Media', download: 'Download', backup: 'Backup', sicurezza: 'Sicurezza', aggiornamenti: 'Aggiornamenti' };
 const LEVEL: Record<string, [string, Tone]> = { info: ['Informazioni', 'info'], warning: ['Avvisi', 'warn'], error: ['Errori', 'err'] };
 const TYPE_LABEL: Record<Channel['type'], string> = { homeassistant: 'Home Assistant (app sul telefono)', ntfy: 'ntfy', telegram: 'Telegram', webhook: 'Webhook' };
 

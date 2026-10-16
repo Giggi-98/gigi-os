@@ -5,14 +5,14 @@ import type { BlockList } from 'node:net';
 import { isIP } from 'node:net';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { DB } from './db.js';
+import { getSetting, setSetting, type DB } from './db.js';
 import type { Events, Level } from './events.js';
 import type { Integrations } from './integrations.js';
 import { newId, type Audit } from './security.js';
 import { safeFetch, validateUrl, TargetError } from './ssrf.js';
 import type { Vault } from './vault.js';
 
-export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup', 'sicurezza'] as const;
+export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup', 'sicurezza', 'aggiornamenti'] as const;
 const LEVELS: Level[] = ['info', 'warning', 'error'];
 
 type ChannelRow = { id: string; type: string; name: string; config: string; secret_enc: string | null; enabled: number; created_at: number; updated_at: number };
@@ -393,6 +393,20 @@ export class Automations {
 
   history(limit = 100) {
     return this.db.prepare('SELECT * FROM notifications ORDER BY id DESC LIMIT ?').all(Math.min(limit, 500));
+  }
+
+  /**
+   * Regole suggerite arrivate con versioni successive: create una volta sola, disattivate. Se l'utente le elimina
+   * non ricompaiono (flag in settings).
+   */
+  ensurePresets() {
+    const presets: [string, string, (typeof SOURCES)[number][], Level, string | null, number][] = [['updates', 'Aggiornamenti disponibili', ['aggiornamenti'], 'info', null, 1440]];
+    for (const [flag, name, sources, minLevel, matchText, throttleMin] of presets) {
+      const key = `rules.preset.${flag}`;
+      if (getSetting(this.db, key)) continue;
+      if (!this.rules().some((r) => r.name === name)) this.saveRule({ name, sources, minLevel, matchText, channels: [], throttleMin, enabled: false });
+      setSetting(this.db, key, '1');
+    }
   }
 
   /** Regole suggerite, create disattivate e senza canale finché l'utente non le collega. */
