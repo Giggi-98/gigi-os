@@ -15,3 +15,6 @@ backups/
 
 # Impostazioni specifiche di ogni server (si parte da compose.override.example.yaml o le genera install.sh)
 compose.override.yaml
+
+# Blocco di update.sh durante un aggiornamento
+.update.lock

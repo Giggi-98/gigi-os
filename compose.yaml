@@ -3,7 +3,7 @@
 name: gigi-os
 
 x-hardening: &hardening
-  image: ${GIGI_IMAGE_PREFIX:-}gigi-os:${GIGI_VERSION:-0.2.0}
+  image: ${GIGI_IMAGE_PREFIX:-}gigi-os:${GIGI_VERSION:-0.3.0}
   restart: unless-stopped
   user: "1000:1000"
   read_only: true
@@ -17,8 +17,8 @@ x-hardening: &hardening
 services:
   agent:
     <<: *hardening
-    image: ${GIGI_IMAGE_PREFIX:-}gigi-os-agent:${GIGI_VERSION:-0.2.0}
-    build: { context: ., target: agent, args: { GIGI_VERSION: "${GIGI_VERSION:-0.2.0}" } }
+    image: ${GIGI_IMAGE_PREFIX:-}gigi-os-agent:${GIGI_VERSION:-0.3.0}
+    build: { context: ., target: agent, args: { GIGI_VERSION: "${GIGI_VERSION:-0.3.0}" } }
     container_name: gigi-agent
     command: ["node", "apps/agent/dist/index.js"]
     # Rete host SOLO per leggere i contatori delle interfacce dell'host: l'agent non apre alcuna porta.
@@ -64,7 +64,7 @@ services:
 
   api:
     <<: *hardening
-    build: { context: ., target: runtime, args: { GIGI_VERSION: "${GIGI_VERSION:-0.2.0}" } }
+    build: { context: ., target: runtime, args: { GIGI_VERSION: "${GIGI_VERSION:-0.3.0}" } }
     container_name: gigi-api
     command: ["node", "apps/api/dist/index.js"]
     # Rete host: i servizi da monitorare ascoltano anche su 127.0.0.1 (Navidrome, Jellyfin, Home Assistant).
@@ -92,7 +92,7 @@ services:
       # Fuso orario per gli orari scelti dall'utente (backup, ore di silenzio, digest): senza, il container usa UTC
       TZ: ${GIGI_TZ:-Europe/Rome}
       # Versione in uso e repo GitHub delle release per il controllo aggiornamenti di GIGI OS (vuoto = nessun controllo)
-      GIGI_VERSION: ${GIGI_VERSION:-0.2.0}
+      GIGI_VERSION: ${GIGI_VERSION:-0.3.0}
       GIGI_RELEASE_REPO: ${GIGI_RELEASE_REPO:-}
       GIGI_BACKUP_DIR: /backups
       GIGI_BACKUP_EXTRA: env=/backup-src/.env,compose.yaml=/backup-src/compose.yaml
@@ -115,8 +115,8 @@ services:
 
   media:
     <<: *hardening
-    image: ${GIGI_IMAGE_PREFIX:-}gigi-os-media:${GIGI_VERSION:-0.2.0}
-    build: { context: ., target: media, args: { GIGI_VERSION: "${GIGI_VERSION:-0.2.0}" } }
+    image: ${GIGI_IMAGE_PREFIX:-}gigi-os-media:${GIGI_VERSION:-0.3.0}
+    build: { context: ., target: media, args: { GIGI_VERSION: "${GIGI_VERSION:-0.3.0}" } }
     container_name: gigi-media
     command: ["node", "apps/media/dist/index.js"]
     # Rete host per raggiungere Jellyfin (127.0.0.1:8096) e qBittorrent; nessuna porta in ascolto.

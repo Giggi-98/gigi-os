@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { compareVersions, listTags, newerTag, parseRef, Updates } from '../apps/api/dist/updates.js';
+import { compareVersions, latestGigi, listTags, newerTag, parseRef, Updates } from '../apps/api/dist/updates.js';
 import { kernelCompare, parseNotifier } from '../apps/agent/dist/updates.js';
 import { openDb } from '../apps/api/dist/db.js';
 import { Events } from '../apps/api/dist/events.js';
@@ -115,6 +115,17 @@ function make({ imagesFail = false } = {}) {
   ]);
   return new Updates(db, agent, integrations, new Events(db), { version: '0.2.0', releaseRepo: 'me/gigi-os', stackRoots: ['/opt/stacks'], fetch });
 }
+test('ultima versione di GIGI OS: release, altrimenti il tag più alto', async () => {
+  const rel = fakeFetch([[/releases\/latest/, (u) => res({ tag_name: 'v0.4.0', html_url: 'https://github.com/me/g/releases/tag/v0.4.0' }, { url: u })]]);
+  assert.deepEqual(await latestGigi(rel, 'me/g'), { latest: '0.4.0', url: 'https://github.com/me/g/releases/tag/v0.4.0' });
+  const tags = fakeFetch([[/\/tags\?/, (u) => res([{ name: 'v0.10.0-rc1' }, { name: 'v0.9.0' }, { name: 'v0.10.0' }, { name: 'prova' }], { url: u })]]);
+  assert.deepEqual(await latestGigi(tags, 'me/g'), { latest: '0.10.0', url: 'https://github.com/me/g/releases/tag/v0.10.0' });
+  const none = fakeFetch([[/\/tags\?/, (u) => res([], { url: u })]]);
+  assert.deepEqual(await latestGigi(none, 'me/g'), { latest: null, url: null });
+  const down = fakeFetch([[/releases\/latest/, (u) => res({}, { status: 503, url: u })]]);
+  await assert.rejects(latestGigi(down, 'me/g'), /HTTP 503/);
+});
+
 const updEvents = () => db.prepare("SELECT level, title FROM events WHERE source = 'aggiornamenti' ORDER BY id").all();
 
 test('controllo completo: container, versioni, sistema, app, GIGI OS', async () => {

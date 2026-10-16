@@ -33,7 +33,7 @@ type Result = {
   } | null;
   hostError: string | null;
   apps: { name: string; status: 'aggiornato' | 'disponibile' | 'non configurato' | 'errore'; current: string | null; latest: string | null; detail: string | null }[];
-  gigi: { version: string; latest: string | null; source: string | null; error: string | null };
+  gigi: { version: string; latest: string | null; source: string | null; error: string | null; url?: string | null };
 };
 
 const tagOf = (ref: string) => {
@@ -246,6 +246,18 @@ export function UpdatesPage() {
               <Row k="GIGI OS">
                 <span className="font-mono text-xs">{r.gigi.version}</span>
                 {gigiNew && <Badge tone="accent" className="ml-2">{r.gigi.latest} disponibile</Badge>}
+                {gigiNew && r.gigi.url && (
+                  <a href={r.gigi.url} target="_blank" rel="noreferrer" className="ml-2 text-xs text-accent hover:underline">
+                    Novità
+                  </a>
+                )}
+                {gigiNew && (
+                  <div className="mt-1.5 space-y-1 text-[11px] text-muted">
+                    <div>Sul server, nella cartella di GIGI OS (backup e ripristino automatici se qualcosa va storto):</div>
+                    <CopyCmd cmd="sudo ./update.sh" />
+                  </div>
+                )}
+                {r.gigi.source && !r.gigi.error && !r.gigi.latest && <div className="mt-0.5 text-[11px] text-muted">Nessuna versione pubblicata su {r.gigi.source}</div>}
                 {!r.gigi.source && <div className="mt-0.5 text-[11px] text-muted">Controllo delle release non configurato (GIGI_RELEASE_REPO)</div>}
                 {r.gigi.error && <div className="mt-0.5 text-[11px] text-muted">{r.gigi.error}</div>}
               </Row>

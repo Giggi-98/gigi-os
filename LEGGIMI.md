@@ -9,7 +9,7 @@ GIGI OS gira in un proprio stack Docker (`gigi-os`). Le altre applicazioni (Jell
 Su un server Linux con Docker e Docker Compose v2:
 
 ```sh
-git clone <repo> gigi-os && cd gigi-os
+git clone https://github.com/Giggi-98/gigi-os.git && cd gigi-os
 sudo ./install.sh            # rileva IP, gruppi e fuso orario, poi chiede conferma
 sudo ./install.sh --dry-run  # mostra cosa farebbe, senza scrivere né avviare nulla
 ```
@@ -128,10 +128,29 @@ Esegui tutti i comandi da `/opt/gigi-os`. Agiscono **solo** sullo stack GIGI OS.
 ```sh
 docker compose ps                 # stato
 docker compose logs -f api        # log dell'API
-docker compose build && docker compose up -d   # aggiornare dopo modifiche al codice
+docker compose build && docker compose up -d   # dopo modifiche locali al codice (per le versioni: sudo ./update.sh)
 docker compose stop               # fermare GIGI OS (gli altri servizi non ne risentono)
 npm test                          # test unitari e di integrazione (serve Node 22 sull'host)
 ```
+
+### Aggiornare GIGI OS
+
+Quando esce una versione nuova (un tag `vX.Y.Z` su GitHub), la pagina **Aggiornamenti** la mostra con il comando da copiare, e arrivano l’evento «aggiornamenti» e la riga nel digest. Il controllo usa la repo in `GIGI_RELEASE_REPO` (l’installer la ricava dal repository da cui hai clonato).
+
+```sh
+sudo ./update.sh --check     # c'è una versione nuova? (esce con 10 se sì)
+sudo ./update.sh             # aggiorna all'ultima versione, dopo una conferma
+sudo ./update.sh --dry-run   # mostra cosa farebbe
+sudo ./update.sh --version 0.3.0   # va a una versione precisa, anche precedente
+```
+
+Cosa fa, in ordine: scarica tag e codice con git (come proprietario della cartella), si ferma se trova file del repository modificati a mano o commit locali che la versione non contiene, porta il codice alla versione, aggiorna `GIGI_VERSION` e aggiunge al `.env` le chiavi nuove (con `install.sh`, che non sovrascrive niente), **costruisce le immagini mentre GIGI OS continua a funzionare** (o le scarica, con `GIGI_IMAGE_PREFIX`), ferma API e worker media, copia `./data` in `backups/update-<da>-to-<a>-<data>/` e riavvia **solo** lo stack `gigi-os`.
+
+Se la nuova versione non diventa sana entro due minuti, torna da solo alla precedente: rimette codice, versione e dati di prima (quelli del tentativo restano in `backups/update-failed-…`). Se la costruzione delle immagini fallisce, non viene riavviato niente. Le copie in `backups/update-*` si possono cancellare a mano dopo qualche giorno; le immagini delle versioni vecchie restano per un eventuale ritorno (`docker image ls '*gigi-os*'`).
+
+Tornando a una versione precedente con `--version`, i dati restano quelli attuali: se la versione nuova aveva cambiato il database, rimetti la copia `backups/update-…` fatta prima di aggiornare (a stack fermo). `--main` segue il ramo `main` invece delle versioni pubblicate (solo per chi sviluppa).
+
+**Pubblicare una versione** (per chi mantiene la repo): aggiorna `version` in `package.json` (e `npm install --package-lock-only`), aggiungi la sezione in `CHANGELOG.md`, poi `git tag vX.Y.Z && git push origin main vX.Y.Z`. Il workflow di release verifica che il tag coincida con `package.json`, pubblica le immagini su GHCR e crea la release con le note del CHANGELOG.
 
 ### Backup
 

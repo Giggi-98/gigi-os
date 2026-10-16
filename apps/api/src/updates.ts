@@ -81,6 +81,21 @@ async function getJson<T>(f: Fetch, url: string, headers: Record<string, string>
   return { body: JSON.parse(text) as T, link: res.headers.get('link') };
 }
 
+/** Ultima versione di GIGI OS: la release GitHub più recente, altrimenti il tag vX.Y.Z più alto (repo senza release). */
+export async function latestGigi(f: Fetch, repo: string): Promise<{ latest: string | null; url: string | null }> {
+  try {
+    const r = await getJson<{ tag_name: string; html_url: string }>(f, `https://api.github.com/repos/${repo}/releases/latest`);
+    return { latest: r.body.tag_name.replace(/^v/, ''), url: r.body.html_url ?? null };
+  } catch (e) {
+    if (!/HTTP 404$/.test((e as Error).message)) throw e;
+  }
+  const tags = (await getJson<{ name: string }[]>(f, `https://api.github.com/repos/${repo}/tags?per_page=100`)).body
+    .map((t) => t.name)
+    .filter((n) => /^v?\d+\.\d+\.\d+$/.test(n));
+  const best = tags.reduce<string | null>((m, n) => (!m || compareVersions(n, m) > 0 ? n : m), null);
+  return { latest: best ? best.replace(/^v/, '') : null, url: best ? `https://github.com/${repo}/releases/tag/${best}` : null };
+}
+
 export async function listTags(f: Fetch, registry: string, repo: string): Promise<string[]> {
   if (registry === 'docker.io') {
     const r = await getJson<{ results: { name: string }[] }>(f, `https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100&ordering=last_updated`);
@@ -123,7 +138,7 @@ export type UpdatesResult = {
   host: (AgentHost & { aptStale: boolean }) | null;
   hostError: string | null;
   apps: AppResult[];
-  gigi: { version: string; latest: string | null; source: string | null; error: string | null };
+  gigi: { version: string; latest: string | null; source: string | null; error: string | null; url: string | null };
 };
 
 export class Updates {
@@ -212,11 +227,10 @@ export class Updates {
       }
     } else apps.push({ name: 'Home Assistant', status: 'non configurato', current: null, latest: null, detail: null });
 
-    const gigi: UpdatesResult['gigi'] = { version: this.opts.version, latest: null, source: this.opts.releaseRepo, error: null };
+    const gigi: UpdatesResult['gigi'] = { version: this.opts.version, latest: null, source: this.opts.releaseRepo, error: null, url: null };
     if (this.opts.releaseRepo) {
       try {
-        const r = await getJson<{ tag_name: string }>(this.opts.fetch ?? fetch, `https://api.github.com/repos/${this.opts.releaseRepo}/releases/latest`);
-        gigi.latest = r.body.tag_name.replace(/^v/, '');
+        Object.assign(gigi, await latestGigi(this.opts.fetch ?? fetch, this.opts.releaseRepo));
       } catch (e) {
         gigi.error = (e as Error).message.slice(0, 160);
       }
@@ -250,7 +264,7 @@ export class Updates {
     if (h?.kernel.rebootNeeded) found.push([`reboot:${h.kernel.newest}`, 'warning', `Riavvio necessario per il kernel ${h.kernel.newest}`, `In uso: ${h.kernel.running}`]);
     if (h?.aptStale) found.push([`aptstale:${h.apt.lastSuccess}`, 'warning', 'Gli indici dei pacchetti non si aggiornano', 'Prova «sudo apt update» per vedere quale sorgente non risponde']);
     for (const a of r.apps) if (a.status === 'disponibile') found.push([`app:${a.name}:${a.latest ?? ''}`, 'info', `${a.name}: aggiornamento disponibile${a.latest ? ` (${a.current ?? '?'} → ${a.latest})` : ''}`, null]);
-    if (r.gigi.latest && compareVersions(r.gigi.latest, r.gigi.version) > 0) found.push([`gigi:${r.gigi.latest}`, 'info', `GIGI OS ${r.gigi.latest} disponibile`, `In uso: ${r.gigi.version}`]);
+    if (r.gigi.latest && compareVersions(r.gigi.latest, r.gigi.version) > 0) found.push([`gigi:${r.gigi.latest}`, 'info', `GIGI OS ${r.gigi.latest} disponibile`, `In uso: ${r.gigi.version}. Per aggiornare, nella cartella di GIGI OS sul server: sudo ./update.sh`]);
     // La deduplicazione degli eventi dura 30 minuti: qui si ricorda ciò che è già stato segnalato
     let seen: string[] = [];
     try {

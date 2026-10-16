@@ -114,6 +114,10 @@ step "File .env"
 setkey() { # setkey FILE CHIAVE VALORE: imposta la chiave (solo per un .env nuovo)
   if grep -q "^$2=" "$1"; then sed -i "s|^$2=.*|$2=$3|" "$1"; else printf '%s=%s\n' "$2" "$3" >>"$1"; fi
 }
+# Repo GitHub da cui controllare le nuove versioni: quella da cui è stata clonata questa cartella
+RELREPO="$(git -c safe.directory="$(pwd)" remote get-url origin 2>/dev/null | sed -n 's#^\(https://\|git@\|ssh://git@\)github\.com[:/]\([A-Za-z0-9_.-]*/[A-Za-z0-9_.-]*\)$#\2#p' | sed 's/\.git$//')"
+VER="$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json | head -1)"
+[ -n "$RELREPO" ] || RELREPO="$(sed -n 's/^GIGI_RELEASE_REPO=//p' .env.example | head -1)"
 LIBS="movies=$MEDIA/media/Movies,series=$MEDIA/media/TV,animeMovies=$MEDIA/media/Anime/Movies,animeSeries=$MEDIA/media/Anime/TV"
 if [ -f .env ]; then
   info ".env esiste già: resta com'è; aggiungo solo le chiavi che mancano"
@@ -126,7 +130,7 @@ if [ -f .env ]; then
       for k in $missing; do
         case "$k" in
           GIGI_BIND) v="$IP" ;; DOCKER_GID) v="$DOCKER_GID" ;; JOURNAL_GID) v="$JOURNAL_GID" ;;
-          GIGI_TZ) v="$TZV" ;; GIGI_MEDIA_ROOT) v="$MEDIA" ;;
+          GIGI_TZ) v="$TZV" ;; GIGI_MEDIA_ROOT) v="$MEDIA" ;; GIGI_RELEASE_REPO) v="$RELREPO" ;; GIGI_VERSION) v="${VER:-0.0.0}" ;;
           *) v="$(sed -n "s/^$k=//p" .env.example | head -1)" ;;
         esac
         printf '%s=%s\n' "$k" "$v" >>.env
@@ -145,6 +149,8 @@ else
     setkey .env GIGI_MEDIA_LIBRARIES "$LIBS"
     setkey .env GIGI_FILES_ROOTS "Media=$MEDIA"
     setkey .env GIGI_TZ "$TZV"
+    setkey .env GIGI_RELEASE_REPO "$RELREPO"
+    [ -z "$VER" ] || setkey .env GIGI_VERSION "$VER"
     chmod 644 .env  # nessun segreto (stanno in secrets/); gigi-api lo legge per includerlo nei backup
     info "creato .env (controlla GIGI_MEDIA_LIBRARIES)"
   fi
@@ -232,4 +238,4 @@ if [ "$DRY" = 0 ]; then
   code="$(docker logs gigi-api 2>&1 | sed -n 's/.*codice di setup monouso: \([A-Za-z0-9_-]*\).*/\1/p' | tail -1)"
   [ -n "$code" ] && say "  Codice per creare il primo amministratore: $code"
 fi
-say "  Fermare: docker compose stop · Aggiornare: git pull && sudo ./install.sh"
+say "  Fermare: docker compose stop · Aggiornare: sudo ./update.sh"
