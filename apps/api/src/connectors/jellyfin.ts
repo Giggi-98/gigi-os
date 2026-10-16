@@ -23,6 +23,7 @@ type Item = {
   ImageTags?: Record<string, string>;
   SeriesId?: string;
   SeriesPrimaryImageTag?: string;
+  ServerId?: string;
 };
 
 export const jellyfin: ConnectorDef = {
@@ -40,7 +41,7 @@ export const jellyfin: ConnectorDef = {
       fields: [{ key: 'apiKey', label: 'API key', type: 'password', required: true, help: 'Dashboard Jellyfin → Chiavi API → +' }],
     },
   ],
-  capabilities: ['health', 'system-info', 'libraries', 'latest-items', 'scan-status', 'sessions'],
+  capabilities: ['health', 'system-info', 'libraries', 'latest-items', 'scan-status', 'sessions', 'search'],
 
   async test(ctx) {
     const pub = json<{ Version: string; ServerName: string; StartupWizardCompleted: boolean }>(
@@ -60,6 +61,26 @@ export const jellyfin: ConnectorDef = {
   },
 
   resources: {
+    /** Ricerca titoli per Ctrl+K (sola lettura): film, serie ed episodi. */
+    async search(ctx, params) {
+      const q = (params.get('q') ?? '').trim().slice(0, 80);
+      if (q.length < 2) return [];
+      const r = await get<{ Items: Item[] }>(
+        ctx,
+        `/Items?searchTerm=${encodeURIComponent(q)}&Recursive=true&IncludeItemTypes=Movie,Series,Episode&Limit=8&Fields=ProductionYear`,
+        'Ricerca',
+      );
+      return r.Items.map((i) => ({
+        id: i.Id,
+        name: i.Name,
+        type: i.Type,
+        year: i.ProductionYear ?? null,
+        seriesName: i.SeriesName ?? null,
+        season: i.ParentIndexNumber ?? null,
+        episode: i.IndexNumber ?? null,
+        serverId: i.ServerId ?? null,
+      }));
+    },
     async overview(ctx) {
       const [info, folders, tasks, sessions, counts] = await Promise.all([
         get<{ ServerName: string; Version: string; HasPendingRestart: boolean; HasUpdateAvailable: boolean }>(ctx, '/System/Info', 'System/Info'),

@@ -11,6 +11,7 @@ import { MediaBridge } from './media.js';
 import { Network } from './network.js';
 import { Metrics } from './metrics.js';
 import { Mfa } from './mfa.js';
+import { Launcher } from './launcher.js';
 import { Automations, watchDownloads } from './automations.js';
 import { Backups } from './backup.js';
 import { getSetting, setSetting } from './db.js';
@@ -50,6 +51,8 @@ async function main() {
   const network = new Network(db, config.dataDir, agent, events);
   network.startMonitor((m, e) => log('warn', m, e ?? {}));
   const metrics = new Metrics(db, agent, config.metricsDays);
+  const launcher = new Launcher(db, buildBlockList(config.allowedTargets), integrations, agent, () => network.listening(), config.host, config.port);
+  launcher.start((m, e) => log('warn', m, e ?? {}));
   metrics.start((m, e) => log('warn', m, e ?? {}));
   const media = new MediaBridge(new AgentClient(config.mediaSocket, 'Motore media'), agent, integrations, events, new AgentClient(config.filesSocket, 'File manager'));
 
@@ -88,6 +91,7 @@ async function main() {
     network,
     metrics,
     mfa: new Mfa(db, vault),
+    launcher,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

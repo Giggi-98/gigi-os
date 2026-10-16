@@ -258,6 +258,8 @@ export class Integrations {
     if (c && Date.now() - c.t < ttlMs) return c.data;
     try {
       const data = await fn(this.ctx(r), params);
+      // Le ricerche (Ctrl+K) creano una voce per testo digitato: limite alla cache, le più vecchie escono per prime.
+      if (this.cache.size >= 500) for (const k of [...this.cache.keys()].slice(0, 100)) this.cache.delete(k);
       this.cache.set(key, { t: Date.now(), data });
       return data;
     } catch (e) {

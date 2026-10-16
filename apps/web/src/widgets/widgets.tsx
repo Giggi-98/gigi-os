@@ -9,6 +9,7 @@ import {
   HardDrive,
   History,
   LayoutGrid,
+  AppWindow,
   MemoryStick,
   Network,
   Server,
@@ -41,6 +42,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ago, bytes, duration, eta, pct, rate } from '../lib/format';
 import { byType, useDiskMetrics, useHistory, useOverview, useResource, useSystem } from '../lib/queries';
 import { forecastText } from '../pages/System';
+import { useLauncher } from '../pages/Apps';
+import { LauncherTile } from '../components/AppTile';
 
 type WidgetDef = {
   title: string;
@@ -263,6 +266,26 @@ function ContainersWidget() {
   );
 }
 
+function LauncherWidget() {
+  const q = useLauncher();
+  if (q.isError) return <ErrorBox error={q.error} compact />;
+  if (!q.data) return <Loading />;
+  if (q.data.length === 0)
+    return <Empty title="Nessuna app nel launcher" action={<Link className="text-xs text-accent hover:underline" to="/app">Aggiungi le app</Link>} />;
+  return (
+    <div>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2">
+        {q.data.slice(0, 16).map((a) => (
+          <LauncherTile key={a.id} app={a} compact />
+        ))}
+      </div>
+      <Link to="/app" className="mt-2 inline-block text-xs text-accent hover:underline">
+        {q.data.length > 16 ? `Tutte le ${q.data.length} app` : 'Gestisci le app'}
+      </Link>
+    </div>
+  );
+}
+
 function AppsWidget() {
   const o = useOverview();
   if (o.isError) return <ErrorBox error={o.error} compact />;
@@ -459,6 +482,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   network: { title: 'Rete', icon: <Network />, description: 'Traffico in tempo reale', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: NetworkWidget },
   history: { title: 'Ultima ora', icon: <History />, description: 'Andamento CPU e RAM', size: { w: 8, h: 7, minW: 4, minH: 5 }, Component: HistoryWidget },
   host: { title: 'Host', icon: <Server />, description: 'Sistema, kernel, uptime', size: { w: 4, h: 7, minW: 3, minH: 5 }, Component: HostWidget },
+  launcher: { title: 'App', icon: <AppWindow />, description: 'Le app del launcher, con stato', size: { w: 8, h: 5, minW: 3, minH: 3 }, Component: LauncherWidget },
   apps: { title: 'Applicazioni', icon: <LayoutGrid />, description: 'Stato delle app collegate', size: { w: 8, h: 6, minW: 4, minH: 4 }, Component: AppsWidget },
   containers: { title: 'Container', icon: <Boxes />, description: 'Salute dei container Docker', size: { w: 4, h: 11, minW: 3, minH: 6 }, Component: ContainersWidget },
   jellyfin: { title: 'Aggiunti di recente', icon: <Clapperboard />, description: 'Ultimi contenuti Jellyfin', size: { w: 8, h: 6, minW: 4, minH: 5 }, Component: JellyfinWidget },
@@ -479,6 +503,7 @@ export const DEFAULT_LAYOUT = [
   { i: 'mediaQueue', type: 'mediaQueue', x: 8, y: 23 },
   { i: 'downloads', type: 'downloads', x: 0, y: 24 },
   { i: 'events', type: 'events', x: 6, y: 24 },
+  { i: 'launcher', type: 'launcher', x: 0, y: 31 },
 ].map((l) => ({ ...l, w: WIDGETS[l.type].size.w, h: WIDGETS[l.type].size.h }));
 
 export function WidgetFrame({ type, editing, onRemove }: { type: string; editing: boolean; onRemove: () => void }) {

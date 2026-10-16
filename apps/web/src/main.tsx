@@ -8,6 +8,7 @@ import { Layout } from './components/Layout';
 import { ToastProvider } from './components/ui';
 import { ApiError } from './lib/api';
 import { AuthProvider, useAuth } from './lib/auth';
+import { AppsPage } from './pages/Apps';
 import { ArmonyPage } from './pages/Armony';
 import { AutomationsPage } from './pages/Automations';
 import { BackupPage } from './pages/Backup';
@@ -49,6 +50,7 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
+        <Route path="app" element={<AppsPage />} />
         <Route path="sistema" element={<SystemPage />} />
         <Route path="rete" element={<NetworkPage />} />
         <Route path="docker" element={<DockerPage />} />

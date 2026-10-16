@@ -12,6 +12,7 @@ import { registerBackups } from './backup.js';
 import { registerStacks } from './stacks.js';
 import { registerNetwork } from './network.js';
 import { registerMetrics } from './metrics.js';
+import { registerLauncher } from './launcher.js';
 import { atLeast, COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
 import { MFA_REQUIRED } from './mfa.js';
 
@@ -699,6 +700,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   registerStacks(app, agent, audit, events, viewer, admin);
   if (d.network) registerNetwork(app, d.network, audit, viewer, admin);
   if (d.metrics) registerMetrics(app, d.metrics, viewer);
+  if (d.launcher) registerLauncher(app, d.launcher, audit, viewer, admin);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }

@@ -203,3 +203,31 @@ export type Overview = {
   integrations: Integration[];
   events: EventRow[];
 };
+
+// Launcher delle app (D-030)
+export type AppStatus = 'online' | 'degraded' | 'offline' | 'unknown';
+export type LauncherApp = {
+  id: string;
+  name: string;
+  url: string;
+  group: string;
+  color: string;
+  position: number;
+  container: string | null;
+  integrationId: string | null;
+  icon: string | null;
+  status: AppStatus;
+  statusSource: 'integrazione' | 'container' | 'http' | null;
+  checkedAt: number | null;
+};
+export type LauncherCandidate = {
+  name: string;
+  url: string;
+  source: 'integrazione' | 'porta';
+  type: string | null;
+  container: string | null;
+  integrationId: string | null;
+  openable: boolean;
+  reason: string | null;
+  added: boolean;
+};

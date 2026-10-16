@@ -19,9 +19,12 @@ import {
   Wand2,
   DatabaseBackup,
   Download,
+  LayoutGrid,
+  Search,
   X,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { CommandPalette, usePaletteShortcut } from './CommandPalette';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ROLE_LABEL } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -30,8 +33,14 @@ import { useTheme } from '../lib/theme';
 import { Badge, Button, cx, Dot } from './ui';
 
 type Item = { to: string; label: string; icon: ReactNode; soon?: boolean };
-const NAV: { group: string; items: Item[] }[] = [
-  { group: 'Panoramica', items: [{ to: '/', label: 'Dashboard', icon: <LayoutDashboard /> }] },
+export const NAV: { group: string; items: Item[] }[] = [
+  {
+    group: 'Panoramica',
+    items: [
+      { to: '/', label: 'Dashboard', icon: <LayoutDashboard /> },
+      { to: '/app', label: 'App', icon: <LayoutGrid /> },
+    ],
+  },
   {
     group: 'Infrastruttura',
     items: [
@@ -60,6 +69,7 @@ const NAV: { group: string; items: Item[] }[] = [
     ],
   },
 ];
+const PAGES = NAV.flatMap((g) => g.items.map((i) => ({ to: i.to, label: i.label, icon: i.icon, group: g.group })));
 
 function readCollapsed() {
   try {
@@ -74,6 +84,9 @@ export function Layout() {
   const { theme, toggle } = useTheme();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  usePaletteShortcut(openPalette);
   const loc = useLocation();
   const overview = useOverview();
 
@@ -181,6 +194,11 @@ export function Layout() {
             {problems > 0 && <Badge tone="warn">{problems} da verificare</Badge>}
           </div>
           <div className="ml-auto flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={openPalette} aria-label="Cerca (Ctrl+K)" className="gap-2 text-muted">
+              <Search />
+              <span className="hidden lg:inline">Cerca</span>
+              <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-sans text-[10px] lg:inline">Ctrl K</kbd>
+            </Button>
             <Button variant="ghost" size="icon" onClick={toggle} aria-label={theme === 'dark' ? 'Passa al tema chiaro' : 'Passa al tema scuro'}>
               {theme === 'dark' ? <Sun /> : <Moon />}
             </Button>
@@ -194,6 +212,7 @@ export function Layout() {
             </Button>
           </div>
         </header>
+        {paletteOpen && <CommandPalette open onClose={() => setPaletteOpen(false)} pages={PAGES} />}
         <main className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] md:px-6">
           <div className="mx-auto max-w-[1600px]">
             <Outlet />

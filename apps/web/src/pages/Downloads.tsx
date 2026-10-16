@@ -18,7 +18,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, cx, Dialog, Empty, ErrorBox, Field, Input, Meter, PageHeader, Select, Skeleton, Tabs, useToast, type Tone } from '../components/ui';
 import { api, ApiError, type Integration } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -165,7 +165,9 @@ function TorrentsTab({ qb }: { qb: Integration }) {
   const media = useQuery({ queryKey: ['media-items'], queryFn: () => api<MediaItem[]>('/media/items?limit=1000'), refetchInterval: 15_000, retry: 0 });
   const act = useAction(qb);
   const [filter, setFilter] = useState('all');
-  const [q, setQ] = useState('');
+  // Da Ctrl+K: /download?q=<nome> apre l'elenco già filtrato.
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(() => params.get('q') ?? '');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<null | { kind: 'delete' | 'limits' | 'category'; hashes: string[] }>(null);
 

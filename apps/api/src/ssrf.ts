@@ -5,6 +5,8 @@ import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
 
 export class TargetError extends Error {
+  /** Per i redirect (mai seguiti qui): la destinazione indicata dal server, se presente. */
+  location?: string;
   constructor(message: string, public code: 'forbidden_target' | 'bad_url' | 'redirect' | 'too_large' | 'timeout' | 'network') {
     super(message);
   }
@@ -62,7 +64,11 @@ export async function safeFetch(
     if (err.name === 'TimeoutError') throw new TargetError('Timeout della richiesta', 'timeout');
     throw new TargetError(`Connessione fallita: ${(err as { cause?: { code?: string } }).cause?.code ?? err.message}`, 'network');
   }
-  if (res.status >= 300 && res.status < 400) throw new TargetError(`Redirect non seguito (${res.status})`, 'redirect');
+  if (res.status >= 300 && res.status < 400) {
+    const err = new TargetError(`Redirect non seguito (${res.status})`, 'redirect');
+    err.location = res.headers.get('location') ?? undefined;
+    throw err;
+  }
   const max = init.maxBytes ?? 5 * 1024 * 1024;
   const chunks: Buffer[] = [];
   let size = 0;

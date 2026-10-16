@@ -195,7 +195,17 @@ type DTab = 'overview' | 'logs' | 'env' | 'storage';
 function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void }) {
   const { isAdmin, isOperator } = useAuth();
   const [tab, setTab] = useState<DTab>('overview');
-  const [action, setAction] = useState<'start' | 'stop' | 'restart' | null>(null);
+  // Da Ctrl+K: ?a=restart|start apre la stessa conferma dei pulsanti, poi il parametro viene tolto dall'URL.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('a');
+  const [action, setAction] = useState<'start' | 'stop' | 'restart' | null>(isOperator && (asked === 'restart' || asked === 'start') ? asked : null);
+  useEffect(() => {
+    if (!asked) return;
+    const p = new URLSearchParams(params);
+    p.delete('a');
+    setParams(p, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [remove, setRemove] = useState(false);
   const d = useQuery({ queryKey: ['container', name], queryFn: () => api<ContainerDetail>(`/docker/containers/${encodeURIComponent(name)}`), refetchInterval: 10_000 });
 

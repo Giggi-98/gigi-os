@@ -17,6 +17,7 @@ import type { Backups } from './backup.js';
 import type { Network } from './network.js';
 import type { Metrics } from './metrics.js';
 import type { Mfa } from './mfa.js';
+import type { Launcher } from './launcher.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -44,6 +45,7 @@ export type Deps = {
   metrics?: Metrics;
   /** Verifica in due passaggi; assente nei test che non la riguardano. */
   mfa?: Mfa;
+  launcher?: Launcher;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -89,11 +91,13 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
     reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    reply.header(
-      'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-    );
-    if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    // Una route può impostare una CSP più restrittiva (es. icone di terzi in sandbox) o una cache esplicita: non si sovrascrivono.
+    if (!reply.hasHeader('Content-Security-Policy'))
+      reply.header(
+        'Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      );
+    if (req.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) reply.header('Cache-Control', 'no-store');
     return payload;
   });
 
