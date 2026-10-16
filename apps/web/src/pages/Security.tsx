@@ -345,7 +345,7 @@ function UsersTab() {
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs text-muted">{u.lastLoginAt ? ago(u.lastLoginAt) : 'mai'}</td>
+                <td className="px-3 py-2 text-xs whitespace-nowrap text-muted">{u.lastLoginAt ? ago(u.lastLoginAt) : 'mai'}</td>
                 <td className="px-4 py-2 text-right">
                   <Button
                     size="sm"
@@ -458,7 +458,7 @@ function AuditTab() {
             {q.data.map((a) => (
               <tr key={a.id} className="border-b border-line/60 last:border-0">
                 <td className="px-4 py-2 text-xs whitespace-nowrap text-muted tabular">{dateTime(a.ts)}</td>
-                <td className="px-3 py-2">{a.username ?? '—'}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{a.username ?? '—'}</td>
                 <td className="px-3 py-2 font-mono text-xs">{a.action}</td>
                 <td className="max-w-[240px] truncate px-3 py-2 text-fg-2" title={a.details ?? undefined}>{a.target ?? '—'}</td>
                 <td className="px-3 py-2">

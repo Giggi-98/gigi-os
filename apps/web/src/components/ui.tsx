@@ -44,11 +44,12 @@ export function Card({
       style={{ boxShadow: 'var(--shadow)' }}
     >
       {(title || actions) && (
-        <header className={cx('flex items-center gap-2 px-4 pt-3.5 pb-2', dragHandle && 'drag-handle cursor-grab active:cursor-grabbing')}>
+        <header className={cx('flex flex-wrap items-center gap-2 px-4 pt-3.5 pb-2', dragHandle && 'drag-handle cursor-grab active:cursor-grabbing')}>
           {icon && <span className="text-muted [&>svg]:size-4">{icon}</span>}
-          <div className="min-w-0 flex-1">
+          {/* Almeno 10rem per titolo e sottotitolo: se le azioni non ci stanno, passano sotto invece di schiacciarli */}
+          <div className="min-w-0 flex-1 basis-40">
             <h2 className="truncate text-[13px] font-medium tracking-tight text-fg-2">{title}</h2>
-            {subtitle && <p className="truncate text-xs text-muted">{subtitle}</p>}
+            {subtitle && <p className="line-clamp-2 text-xs text-pretty text-muted">{subtitle}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>{actions}</div>}
         </header>

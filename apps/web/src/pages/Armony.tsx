@@ -238,7 +238,7 @@ function NowPlaying({ armony }: { armony: Integration }) {
                       max={100}
                       defaultValue={s.volume}
                       aria-label={`Volume ${d.name}`}
-                      className="ml-auto w-28 accent-[var(--accent)]"
+                      className="ml-auto w-28 [--check:var(--accent)]"
                       onPointerUp={(e) => cmd.mutate({ to: d.device, cmd: 'volume', value: Number((e.target as HTMLInputElement).value) })}
                       onKeyUp={(e) => ['ArrowLeft', 'ArrowRight'].includes(e.key) && cmd.mutate({ to: d.device, cmd: 'volume', value: Number((e.target as HTMLInputElement).value) })}
                     />

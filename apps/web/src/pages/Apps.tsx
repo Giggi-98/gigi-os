@@ -331,7 +331,7 @@ function DiscoverDialog({ onClose }: { onClose: () => void }) {
             return (
               <li key={c.url + c.name}>
                 <label className={cx('flex items-start gap-3 rounded-lg border border-line px-3 py-2.5', disabled ? 'opacity-60' : 'cursor-pointer hover:border-line-strong')}>
-                  <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" disabled={disabled} checked={!disabled && chosen.has(c.url)} onChange={() => toggle(c.url)} />
+                  <input type="checkbox" className="mt-0.5 size-4 [--check:var(--accent)]" disabled={disabled} checked={!disabled && chosen.has(c.url)} onChange={() => toggle(c.url)} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[13px] font-medium">{c.name}</span>

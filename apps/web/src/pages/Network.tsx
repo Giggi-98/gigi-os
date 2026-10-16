@@ -223,7 +223,7 @@ function PublicIpCard() {
             <Kv k="Verificato">{ago(q.data.checkedAt)}</Kv>
           </dl>
           <label className="mt-3 flex items-center gap-2 text-xs text-fg-2">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={!!mon.data?.publicIp} disabled={!mon.data || mon.save.isPending} onChange={(e) => mon.save.mutate({ ...mon.data!, publicIp: e.target.checked })} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={!!mon.data?.publicIp} disabled={!mon.data || mon.save.isPending} onChange={(e) => mon.save.mutate({ ...mon.data!, publicIp: e.target.checked })} />
             Controlla ogni 15 minuti e crea un evento «rete» se cambia
           </label>
           <p className="mt-1 text-[11px] text-muted">Servizio usato: api.ipify.org (riserva: icanhazip.com).</p>
@@ -696,7 +696,7 @@ function SpeedTestCard() {
             <tbody>
               {q.data.history.map((h) => (
                 <tr key={h.t} className="border-b border-line/60 last:border-0">
-                  <td className="py-1 text-muted">{dateTime(h.t)}</td>
+                  <td className="py-1 whitespace-nowrap text-muted">{dateTime(h.t)}</td>
                   <td className="py-1 text-right tabular">↓ {h.download} Mbit/s</td>
                   <td className="py-1 text-right tabular">↑ {h.upload} Mbit/s</td>
                   <td className="py-1 text-right tabular">{h.latency} ms</td>
@@ -778,7 +778,7 @@ function DevicesTab() {
                       )}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-xs">{d.mac}{d.randomMac && <span className="ml-1.5 font-sans text-[11px] text-muted">(casuale)</span>}</td>
-                    <td className="px-3 py-1.5 text-xs text-muted">{d.firstSeen ? `dal ${new Date(d.firstSeen).toLocaleDateString('it-IT')} · ${ago(d.lastSeen)}` : 'non ancora registrato'}</td>
+                    <td className="px-3 py-1.5 text-xs whitespace-nowrap text-muted">{d.firstSeen ? `dal ${new Date(d.firstSeen).toLocaleDateString('it-IT')} · ${ago(d.lastSeen)}` : 'non ancora registrato'}</td>
                     <td className="px-4 py-1.5 text-right whitespace-nowrap">
                       <Button size="icon" variant="ghost" aria-label={`Rinomina ${d.ip}`} onClick={() => setEdit({ mac: d.mac, name: d.name ?? '' })}><Pencil /></Button>
                       <Button size="icon" variant="ghost" aria-label={`Accendi ${d.name ?? d.ip} (Wake-on-LAN)`} title="Wake-on-LAN" onClick={() => wake.mutate(d.mac)}><Power /></Button>
@@ -794,7 +794,7 @@ function DevicesTab() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Avvisi" icon={<Moon />}>
           <label className="flex items-start gap-2 text-[13px]">
-            <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={!!mon.data?.devices} disabled={!mon.data || mon.save.isPending} onChange={(e) => mon.save.mutate({ ...mon.data!, devices: e.target.checked })} />
+            <input type="checkbox" className="mt-0.5 size-4 [--check:var(--accent)]" checked={!!mon.data?.devices} disabled={!mon.data || mon.save.isPending} onChange={(e) => mon.save.mutate({ ...mon.data!, devices: e.target.checked })} />
             <span>Nuovi dispositivi in rete<span className="block text-xs text-muted">Ogni 15 minuti legge la tabella ARP (nessuna scansione attiva) e crea un evento «rete» per ogni MAC mai visto: collegalo a una regola in Automazioni per riceverlo su Telegram o Home Assistant.</span></span>
           </label>
         </Card>

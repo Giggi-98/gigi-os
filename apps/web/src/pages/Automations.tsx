@@ -199,7 +199,7 @@ function RuleDialog({ rule, channels, onClose }: { rule: Rule | null; channels: 
           </Field>
           <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-xs font-medium text-fg-2">
-              <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={quiet} onChange={(e) => setQuiet(e.target.checked)} />
+              <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={quiet} onChange={(e) => setQuiet(e.target.checked)} />
               Ore di silenzio (gli errori passano comunque)
             </label>
             <div className="flex items-center gap-2">

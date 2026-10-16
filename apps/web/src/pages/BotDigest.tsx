@@ -79,7 +79,7 @@ function BotCard({ channels }: { channels: Channel[] }) {
             <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 text-[13px]">
               <input
                 type="checkbox"
-                className="size-4 accent-[var(--accent)]"
+                className="size-4 [--check:var(--accent)]"
                 checked={b.settings.enabled}
                 disabled={save.isPending}
                 onChange={(e) => save.mutate({ channelId, enabled: e.target.checked })}
@@ -165,12 +165,12 @@ function DigestCard({ channels }: { channels: Channel[] }) {
       <div className="space-y-4">
         <fieldset className="space-y-2">
           <label className="flex items-center gap-2 text-[13px]">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={s.daily.enabled} onChange={(e) => setS({ ...s, daily: { ...s.daily, enabled: e.target.checked } })} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={s.daily.enabled} onChange={(e) => setS({ ...s, daily: { ...s.daily, enabled: e.target.checked } })} />
             Ogni giorno alle
             <Input type="time" className="h-8 w-28" value={s.daily.time} onChange={(e) => setS({ ...s, daily: { ...s.daily, time: e.target.value } })} aria-label="Ora del digest giornaliero" />
           </label>
           <label className="flex flex-wrap items-center gap-2 text-[13px]">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={s.weekly.enabled} onChange={(e) => setS({ ...s, weekly: { ...s.weekly, enabled: e.target.checked } })} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={s.weekly.enabled} onChange={(e) => setS({ ...s, weekly: { ...s.weekly, enabled: e.target.checked } })} />
             Ogni settimana il
             <Select className="h-8 w-auto" value={s.weekly.day} onChange={(e) => setS({ ...s, weekly: { ...s.weekly, day: Number(e.target.value) } })} aria-label="Giorno del digest settimanale">
               {DAYS.map((d, i) => (
@@ -192,7 +192,7 @@ function DigestCard({ channels }: { channels: Channel[] }) {
               <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-[13px]">
                 <input
                   type="checkbox"
-                  className="size-4 accent-[var(--accent)]"
+                  className="size-4 [--check:var(--accent)]"
                   checked={s.channels.includes(c.id)}
                   onChange={(e) => setS({ ...s, channels: e.target.checked ? [...s.channels, c.id] : s.channels.filter((x) => x !== c.id) })}
                 />

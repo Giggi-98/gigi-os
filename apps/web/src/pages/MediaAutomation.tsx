@@ -180,7 +180,7 @@ export function MediaAutomationPage() {
               <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-3 text-[13px]">
                 <input
                   type="checkbox"
-                  className="size-4 accent-[var(--accent)]"
+                  className="size-4 [--check:var(--accent)]"
                   checked={s?.settings.autoImport ?? false}
                   disabled={!s || settings.isPending}
                   onChange={(e) => settings.mutate({ autoImport: e.target.checked })}

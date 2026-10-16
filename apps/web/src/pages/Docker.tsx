@@ -168,7 +168,7 @@ function ContainersTab({ q }: { q: ReturnType<typeof useContainers> }) {
                     </td>
                     <td className="px-3 text-right tabular">{c.stats ? pct(c.stats.cpu, 1) : '—'}</td>
                     <td className="px-3 text-right tabular">{c.stats ? bytes(c.stats.memUsed) : '—'}</td>
-                    <td className="px-3 pr-4 text-right text-xs text-muted">{c.state === 'running' ? ago(c.startedAt) : ago(c.finishedAt)}</td>
+                    <td className="px-3 pr-4 text-right text-xs whitespace-nowrap text-muted">{c.state === 'running' ? ago(c.startedAt) : ago(c.finishedAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -623,7 +623,7 @@ function SelectionBar({ count, onDelete, onClear, children }: { count: number; o
 
 function RowCheck({ checked, disabled, onChange, label, title }: { checked: boolean; disabled?: boolean; onChange: () => void; label: string; title?: string }) {
   return (
-    <input type="checkbox" className="size-4 accent-[var(--err)] disabled:opacity-30" checked={checked} disabled={disabled} onChange={onChange} aria-label={label} title={title} />
+    <input type="checkbox" className="size-4 [--check:var(--err)] disabled:opacity-30" checked={checked} disabled={disabled} onChange={onChange} aria-label={label} title={title} />
   );
 }
 
@@ -668,7 +668,7 @@ function ImagesTab() {
                 </td>
                 <td className="px-3 py-2">{i.containers.length ? i.containers.join(', ') : <Badge>inutilizzata</Badge>}</td>
                 <td className="px-3 py-2 text-right tabular">{bytes(i.size)}</td>
-                <td className="px-4 py-2 text-right text-xs text-muted">{ago(i.created)}</td>
+                <td className="px-4 py-2 text-right text-xs whitespace-nowrap text-muted">{ago(i.created)}</td>
               </tr>
             ))}
           </tbody>
@@ -717,7 +717,7 @@ function VolumesTab() {
                   <div className="font-mono text-xs">{v.name}</div>
                   <div className="truncate font-mono text-[11px] text-muted">{v.mountpoint}</div>
                 </td>
-                <td className="px-3 py-2 text-fg-2">{v.project ?? '—'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-fg-2">{v.project ?? '—'}</td>
                 <td className="px-4 py-2">{v.containers.length ? v.containers.join(', ') : <Badge tone="warn">orfano</Badge>}</td>
               </tr>
             ))}

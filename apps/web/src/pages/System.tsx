@@ -460,7 +460,7 @@ function ServicesCard() {
             <tbody>
               {rows.map((s) => (
                 <tr key={s.name} className="cursor-pointer border-b border-line/60 last:border-0 hover:bg-surface-2" onClick={() => setOpen(s.name)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setOpen(s.name)}>
-                  <td className="px-4 py-1.5 font-mono text-xs">{s.name.replace(/\.service$/, '')}</td>
+                  <td className="px-4 py-1.5 font-mono text-xs whitespace-nowrap">{s.name.replace(/\.service$/, '')}</td>
                   <td className="max-w-[380px] truncate px-3 py-1.5 text-xs text-fg-2">{s.description}</td>
                   <td className="px-4 py-1.5"><Badge tone={svcTone(s)}>{s.active === s.sub ? s.active : `${s.active} · ${s.sub}`}</Badge></td>
                 </tr>

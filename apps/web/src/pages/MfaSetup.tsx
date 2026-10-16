@@ -147,7 +147,7 @@ export function MfaEnroll({ onDone }: { onDone: () => void }) {
       </div>
       <RecoveryCodes codes={codes} />
       <label className="flex items-center gap-2 text-[13px]">
-        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="size-4 accent-[var(--accent)]" />
+        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="size-4 [--check:var(--accent)]" />
         Ho salvato i codici in un posto sicuro
       </label>
       <Button variant="primary" disabled={!saved} onClick={onDone}>

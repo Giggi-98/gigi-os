@@ -47,7 +47,7 @@ export function BackupPage() {
           <Card title="Pianificazione" icon={<DatabaseBackup />}>
             <div className="space-y-3">
               <label className="flex items-center gap-2 text-[13px]">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
+                <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} />
                 Backup automatico giornaliero
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -61,14 +61,14 @@ export function BackupPage() {
                 </Field>
               </div>
               <label className="flex items-start gap-2 text-[13px]">
-                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--accent)]" checked={form.includeServices} onChange={(e) => setForm({ ...form, includeServices: e.target.checked })} />
+                <input type="checkbox" className="mt-0.5 size-4 [--check:var(--accent)]" checked={form.includeServices} onChange={(e) => setForm({ ...form, includeServices: e.target.checked })} />
                 <span>
                   Includi le configurazioni dei servizi
                   <span className="block text-xs text-muted">qBittorrent (impostazioni, categorie, elenco torrent) e Jellyfin (impostazioni, librerie, utenti e progressi di visione).</span>
                 </span>
               </label>
               <label className="flex items-start gap-2 text-[13px]">
-                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--warn)]" checked={form.includeKey} onChange={(e) => setForm({ ...form, includeKey: e.target.checked })} />
+                <input type="checkbox" className="mt-0.5 size-4 [--check:var(--warn)]" checked={form.includeKey} onChange={(e) => setForm({ ...form, includeKey: e.target.checked })} />
                 <span>
                   Includi la chiave master
                   <span className="block text-xs text-muted">Senza, il backup non basta a recuperare le credenziali salvate; con, chi ha il file può leggerle.</span>

@@ -245,8 +245,8 @@ function TorrentsTab({ qb }: { qb: Integration }) {
               <thead className="border-b border-line text-xs text-muted">
                 <tr>
                   {isOperator && (
-                    <th className="w-10 py-2 pl-4">
-                      <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={sel.size > 0 && selected.length === rows.length} onChange={toggleAll} aria-label="Seleziona tutti" />
+                    <th className="w-10 py-2 pr-2 pl-4">
+                      <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={sel.size > 0 && selected.length === rows.length} onChange={toggleAll} aria-label="Seleziona tutti" />
                     </th>
                   )}
                   <th className={cx('py-2 font-medium', !isOperator && 'pl-4')}>Nome</th>
@@ -267,10 +267,10 @@ function TorrentsTab({ qb }: { qb: Integration }) {
                   return (
                     <tr key={x.hash} className={cx('border-b border-line/60 last:border-0', sel.has(x.hash) && 'bg-accent-soft/40')}>
                       {isOperator && (
-                        <td className="py-2.5 pl-4">
+                        <td className="py-2.5 pr-2 pl-4">
                           <input
                             type="checkbox"
-                            className="size-4 accent-[var(--accent)]"
+                            className="size-4 [--check:var(--accent)]"
                             checked={sel.has(x.hash)}
                             onChange={() => setSel((s) => { const n = new Set(s); if (n.has(x.hash)) n.delete(x.hash); else n.add(x.hash); return n; })}
                             aria-label={`Seleziona ${x.name}`}
@@ -413,7 +413,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
       <div role="radiogroup" aria-label="Cosa eliminare" className="space-y-2">
         {options.map(([id, label, help]) => (
           <label key={id} className={cx('flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-[13px]', mode === id ? 'border-err/50 bg-err-soft/40' : 'border-line hover:border-line-strong')}>
-            <input type="radio" name="delete-mode" className="mt-0.5 size-4 accent-[var(--err)]" checked={mode === id} onChange={() => { setMode(id); setBlocked(null); setForce(false); }} />
+            <input type="radio" name="delete-mode" className="mt-0.5 size-4 [--check:var(--err)]" checked={mode === id} onChange={() => { setMode(id); setBlocked(null); setForce(false); }} />
             <span>
               <span className="font-medium">{label}</span>
               <span className="block text-xs text-muted">{help}</span>
@@ -433,7 +433,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
           <p className="font-medium">Questi file non sono ancora nella libreria e verrebbero persi:</p>
           <ul className="mt-1 space-y-0.5">{blocked.map((f) => <li key={f} className="truncate">• {f}</li>)}</ul>
           <label className="mt-2 flex items-center gap-2 text-fg">
-            <input type="checkbox" className="size-4 accent-[var(--err)]" checked={force} onChange={(e) => setForce(e.target.checked)} />
+            <input type="checkbox" className="size-4 [--check:var(--err)]" checked={force} onChange={(e) => setForce(e.target.checked)} />
             Ho capito, elimina comunque
           </label>
         </div>
@@ -784,7 +784,7 @@ function AddConfirm({
           )}
         </Field>
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={stopped} onChange={(e) => setStopped(e.target.checked)} />
+          <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={stopped} onChange={(e) => setStopped(e.target.checked)} />
           Aggiungi fermo (avvio manuale)
         </label>
         {act.isError && <ErrorBox error={act.error} compact />}
@@ -850,7 +850,7 @@ function AddTab({ qb, onAdded }: { qb: Integration; onAdded: () => void }) {
             </Field>
           </div>
           <label className="flex h-9 items-center gap-2 text-[13px]">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={stopped} onChange={(e) => setStopped(e.target.checked)} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" checked={stopped} onChange={(e) => setStopped(e.target.checked)} />
             Aggiungi fermo
           </label>
           <Button
@@ -904,12 +904,12 @@ function SeedingTab({ qb }: { qb: Integration }) {
       <Card title="Limiti globali di seeding" icon={<Settings2 />}>
         <div className="space-y-4">
           <label className="flex items-center gap-2 text-[13px]">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" disabled={!isAdmin} checked={form.ratioEnabled} onChange={(e) => setForm({ ...form, ratioEnabled: e.target.checked })} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" disabled={!isAdmin} checked={form.ratioEnabled} onChange={(e) => setForm({ ...form, ratioEnabled: e.target.checked })} />
             Ferma al raggiungimento del ratio
             <Input className="ml-auto w-24" inputMode="decimal" value={form.ratio} disabled={!isAdmin || !form.ratioEnabled} onChange={(e) => setForm({ ...form, ratio: e.target.value })} aria-label="Ratio" />
           </label>
           <label className="flex items-center gap-2 text-[13px]">
-            <input type="checkbox" className="size-4 accent-[var(--accent)]" disabled={!isAdmin} checked={form.timeEnabled} onChange={(e) => setForm({ ...form, timeEnabled: e.target.checked })} />
+            <input type="checkbox" className="size-4 [--check:var(--accent)]" disabled={!isAdmin} checked={form.timeEnabled} onChange={(e) => setForm({ ...form, timeEnabled: e.target.checked })} />
             Ferma dopo ore di seeding
             <Input className="ml-auto w-24" inputMode="numeric" value={form.hours} disabled={!isAdmin || !form.timeEnabled} onChange={(e) => setForm({ ...form, hours: e.target.value })} aria-label="Ore" />
           </label>

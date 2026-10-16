@@ -289,7 +289,7 @@ function IntegrationForm({ def, existing, onClose }: { def: IntegrationType; exi
           </Field>
         ))}
         <label className="flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 accent-[var(--accent)]" />
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="size-4 [--check:var(--accent)]" />
           Abilitata (controllo di salute ogni minuto)
         </label>
         {test && (

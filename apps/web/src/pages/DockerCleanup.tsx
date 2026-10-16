@@ -98,7 +98,7 @@ export function DeleteDialog({ kind, items, initial, onClose, onDone }: { kind: 
           return (
             <li key={i.id}>
               <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 hover:bg-surface-2">
-                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--err)]" checked={sel.has(i.id)} onChange={() => toggle(i.id)} />
+                <input type="checkbox" className="mt-0.5 size-4 [--check:var(--err)]" checked={sel.has(i.id)} onChange={() => toggle(i.id)} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-mono text-xs">{i.label}</span>
                   {i.warn && <span className="block text-[11px] text-warn">{i.warn}</span>}

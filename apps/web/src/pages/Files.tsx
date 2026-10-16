@@ -230,7 +230,7 @@ export function FilesPage() {
                         <th className="w-10 py-2 pl-4">
                           <input
                             type="checkbox"
-                            className="size-4 accent-[var(--accent)]"
+                            className="size-4 [--check:var(--accent)]"
                             checked={selected.length === entries.length && entries.length > 0}
                             onChange={() => setSel(selected.length === entries.length ? new Set() : new Set(entries.map((e) => e.name)))}
                             aria-label="Seleziona tutto"
@@ -248,7 +248,7 @@ export function FilesPage() {
                           <td className="py-2 pl-4">
                             <input
                               type="checkbox"
-                              className="size-4 accent-[var(--accent)]"
+                              className="size-4 [--check:var(--accent)]"
                               checked={sel.has(e.name)}
                               onChange={() => setSel((s) => { const n = new Set(s); if (n.has(e.name)) n.delete(e.name); else n.add(e.name); return n; })}
                               aria-label={`Seleziona ${e.name}`}
@@ -267,7 +267,7 @@ export function FilesPage() {
                             </button>
                           </td>
                           <td className="px-3 text-right text-xs text-muted tabular">{e.size !== null ? bytes(e.size) : '—'}</td>
-                          <td className="px-3 text-xs text-muted">{ago(e.mtime)}</td>
+                          <td className="px-3 text-xs whitespace-nowrap text-muted">{ago(e.mtime)}</td>
                           <td className="px-4 font-mono text-[11px] text-muted">
                             {e.mode} {e.owner}:{e.group}
                           </td>

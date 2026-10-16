@@ -276,7 +276,7 @@ function ActionDialog({ project, action, onClose, onJob, onRemoved }: { project:
         )}
         {a.volumes && (
           <label className="flex items-start gap-2 text-[13px]">
-            <input type="checkbox" className="mt-0.5 size-4 accent-[var(--err)]" checked={removeVolumes} onChange={(e) => setRemoveVolumes(e.target.checked)} />
+            <input type="checkbox" className="mt-0.5 size-4 [--check:var(--err)]" checked={removeVolumes} onChange={(e) => setRemoveVolumes(e.target.checked)} />
             <span>Elimina anche i volumi dello stack <span className="block text-xs text-muted">I dati nei volumi Docker vengono cancellati in modo definitivo. Le cartelle montate (bind) non vengono toccate.</span></span>
           </label>
         )}
