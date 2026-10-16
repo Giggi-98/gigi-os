@@ -35,6 +35,8 @@ Al termine controlla in `.env` le cartelle delle librerie (`GIGI_MEDIA_LIBRARIES
   ```
   Con il codice si crea il primo amministratore (password di almeno 12 caratteri). Una volta usato, il codice viene eliminato.
 
+**Lingua:** l’interfaccia è in inglese o in italiano, in base al browser. Si cambia con il pulsante EN/IT nell’intestazione (sul telefono in fondo al menu). La traduzione è in corso: alcune pagine e i messaggi che arrivano dal server sono ancora solo in italiano.
+
 ## Funzionalità disponibili (V1)
 
 | Sezione | Cosa fa | Note |

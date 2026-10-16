@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import clsx from 'clsx';
 import { AlertTriangle, CheckCircle2, Info, Loader2, WifiOff, X, XCircle } from 'lucide-react';
 import {
@@ -168,15 +169,15 @@ export function Dot({ tone, pulse }: { tone: Tone; pulse?: boolean }) {
 }
 
 export const STATUS: Record<IntegrationStatus | 'unknown', { tone: Tone; label: string }> = {
-  online: { tone: 'ok', label: 'Online' },
-  unhealthy: { tone: 'warn', label: 'Non in salute' },
-  offline: { tone: 'err', label: 'Offline' },
-  unauthorized: { tone: 'err', label: 'Accesso negato' },
-  unconfigured: { tone: 'info', label: 'Da configurare' },
-  unsupported: { tone: 'idle', label: 'Non supportato' },
-  error: { tone: 'err', label: 'Errore' },
-  disabled: { tone: 'idle', label: 'Disabilitata' },
-  unknown: { tone: 'idle', label: 'In verifica' },
+  online: { tone: 'ok', label: t('Online') },
+  unhealthy: { tone: 'warn', label: t('Non in salute') },
+  offline: { tone: 'err', label: t('Offline') },
+  unauthorized: { tone: 'err', label: t('Accesso negato') },
+  unconfigured: { tone: 'info', label: t('Da configurare') },
+  unsupported: { tone: 'idle', label: t('Non supportato') },
+  error: { tone: 'err', label: t('Errore') },
+  disabled: { tone: 'idle', label: t('Disabilitata') },
+  unknown: { tone: 'idle', label: t('In verifica') },
 };
 
 export function StatusBadge({ status }: { status: IntegrationStatus | null }) {
@@ -199,8 +200,8 @@ export function containerTone(state: string, health: string | null): Tone {
 
 export function containerLabel(state: string, health: string | null) {
   if (health === 'unhealthy') return 'Unhealthy';
-  if (state === 'running') return health === 'healthy' ? 'Healthy' : health === 'starting' ? 'Avvio' : 'In esecuzione';
-  return ({ exited: 'Fermo', created: 'Creato', paused: 'In pausa', restarting: 'Riavvio', dead: 'Morto' } as Record<string, string>)[state] ?? state;
+  if (state === 'running') return health === 'healthy' ? 'Healthy' : health === 'starting' ? t('Avvio') : t('In esecuzione');
+  return ({ exited: t('Fermo'), created: t('Creato'), paused: t('In pausa'), restarting: t('Riavvio'), dead: t('Morto') } as Record<string, string>)[state] ?? state;
 }
 
 // ───────── Misure ─────────
@@ -276,7 +277,7 @@ export function ErrorBox({ error, compact }: { error: unknown; compact?: boolean
   return (
     <div className={cx('flex items-start gap-2 rounded-lg border border-err/25 bg-err-soft text-err', compact ? 'px-2.5 py-2 text-xs' : 'px-3 py-2.5 text-[13px]')}>
       <Icon className="mt-0.5 size-4 shrink-0" />
-      <span className="min-w-0 break-words">{e?.message ?? 'Errore sconosciuto'}</span>
+      <span className="min-w-0 break-words">{e?.message ?? t('Errore sconosciuto')}</span>
     </div>
   );
 }
@@ -323,7 +324,7 @@ export function Dialog({
               <h2 className="text-base font-semibold">{title}</h2>
               {description && <div className="mt-0.5 text-[13px] text-muted">{description}</div>}
             </div>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="Chiudi">
+            <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('Chiudi')}>
               <X />
             </Button>
           </div>

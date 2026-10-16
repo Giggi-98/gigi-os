@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, LayoutTemplate, Plus, RotateCcw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -31,7 +32,7 @@ export function Dashboard() {
 
   const save = useMutation({
     mutationFn: (w: Item[]) => api('/layout', { method: 'PUT', body: { version: 1, widgets: w } }),
-    onError: (e: Error) => toast('err', `Layout non salvato: ${e.message}`),
+    onError: (e: Error) => toast('err', t('Layout non salvato: {err}', { err: e.message })),
     onSuccess: () => qc.setQueryData(['layout'], (_: unknown) => ({ version: 1, widgets: items })),
   });
 
@@ -78,13 +79,13 @@ export function Dashboard() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description={editing ? 'Trascina dal titolo, ridimensiona dall’angolo. Le modifiche si salvano da sole.' : 'Stato del mini PC, dei container e delle app in tempo reale.'}
+        title={t('Dashboard')}
+        description={editing ? t('Trascina dal titolo, ridimensiona dall’angolo. Le modifiche si salvano da sole.') : t('Stato del server, dei container e delle app in tempo reale.')}
         actions={
           editing ? (
             <>
               <Button size="sm" onClick={() => setAdding(true)} disabled={missing.length === 0}>
-                <Plus /> Aggiungi widget
+                <Plus />{' '}{t('Aggiungi widget')}
               </Button>
               <Button
                 size="sm"
@@ -94,18 +95,18 @@ export function Dashboard() {
                   setAnimate(true);
                   setItems(DEFAULT_LAYOUT);
                   qc.setQueryData(['layout'], null);
-                  toast('ok', 'Layout predefinito ripristinato');
+                  toast('ok', t('Layout predefinito ripristinato'));
                 }}
               >
-                <RotateCcw /> Ripristina
+                <RotateCcw />{' '}{t('Ripristina')}
               </Button>
               <Button size="sm" variant="primary" onClick={() => setEditing(false)}>
-                <Check /> Fine
+                <Check />{' '}{t('Fine')}
               </Button>
             </>
           ) : (
             <Button size="sm" onClick={() => { setAnimate(true); setEditing(true); }}>
-              <LayoutTemplate /> Personalizza
+              <LayoutTemplate />{' '}{t('Personalizza')}
             </Button>
           )
         }
@@ -133,7 +134,7 @@ export function Dashboard() {
           ))}
         </Grid>
       )}
-      <Dialog open={adding} onClose={() => setAdding(false)} title="Aggiungi widget" description="I widget già presenti non sono elencati.">
+      <Dialog open={adding} onClose={() => setAdding(false)} title={t('Aggiungi widget')} description={t('I widget già presenti non sono elencati.')}>
         <ul className="space-y-1.5">
           {missing.map(([type, def]) => (
             <li key={type}>

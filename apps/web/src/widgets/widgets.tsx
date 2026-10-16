@@ -17,6 +17,7 @@ import {
   Wand2,
   Thermometer,
 } from 'lucide-react';
+import { t, tr } from '../lib/i18n';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { AreaChart, Sparkline } from '../components/Chart';
@@ -70,13 +71,13 @@ function CpuWidget() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-4">
-        <Ring value={d.cpu.usage} label="Utilizzo CPU">
+        <Ring value={d.cpu.usage} label={t('Utilizzo CPU')}>
           <span className="text-lg font-semibold tabular">{Math.round(d.cpu.usage)}%</span>
         </Ring>
         <div className="min-w-0 flex-1 space-y-1 text-xs">
           <div className="truncate text-fg-2" title={d.cpuModel}>{d.cpuModel}</div>
           <div className="text-muted tabular">
-            {d.cpu.cores} core · load {d.load[0].toFixed(2)}
+            {t('{n} core · load {load}', { n: d.cpu.cores, load: d.load[0].toFixed(2) })}
           </div>
           {d.cpuTemp !== null && (
             <div className={cx('flex items-center gap-1 tabular', d.cpuTemp >= 85 ? 'text-err' : d.cpuTemp >= 70 ? 'text-warn' : 'text-fg-2')}>
@@ -102,17 +103,17 @@ function MemoryWidget() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-4">
-        <Ring value={p} label="Memoria usata">
+        <Ring value={p} label={t('Memoria usata')}>
           <span className="text-lg font-semibold tabular">{Math.round(p)}%</span>
         </Ring>
         <div className="min-w-0 flex-1 space-y-1 text-xs tabular">
           <div className="text-fg-2">
-            {bytes(m.used)} <span className="text-muted">di {bytes(m.total)}</span>
+            {tr('{used} {of}', { used: bytes(m.used), of: <span className="text-muted">{t('di {total}', { total: bytes(m.total) })}</span> })}
           </div>
-          <div className="text-muted">{bytes(m.available)} disponibili</div>
+          <div className="text-muted">{t('{n} disponibili', { n: bytes(m.available) })}</div>
           {m.swapTotal > 0 && (
             <div className={cx(m.swapUsed / m.swapTotal > 0.5 ? 'text-warn' : 'text-muted')}>
-              Swap {bytes(m.swapUsed)} / {bytes(m.swapTotal)}
+              {t('Swap {used} / {total}', { used: bytes(m.swapUsed), total: bytes(m.swapTotal) })}
             </div>
           )}
         </div>
@@ -137,12 +138,12 @@ function DiskWidget() {
           <div key={d.label}>
             <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
               <span className="truncate font-medium text-fg-2">{d.label}</span>
-              <span className="text-muted tabular">{d.ok ? `${bytes(d.free)} liberi` : 'non leggibile'}</span>
+              <span className="text-muted tabular">{d.ok ? t('{n} liberi', { n: bytes(d.free) }) : t('non leggibile')}</span>
             </div>
-            <Meter value={p} label={`Utilizzo ${d.label}`} />
+            <Meter value={p} label={t('Utilizzo {name}', { name: d.label })} />
             <div className="mt-1 flex justify-between text-[11px] text-muted tabular">
-              <span>{bytes(d.used)} usati</span>
-              <span>{pct(p)} di {bytes(d.total)}</span>
+              <span>{t('{n} usati', { n: bytes(d.used) })}</span>
+              <span>{t('{pct} di {total}', { pct: pct(p), total: bytes(d.total) })}</span>
             </div>
             {(() => {
               const f = m.data?.find((x) => x.label === d.label)?.forecast;
@@ -169,18 +170,18 @@ function NetworkWidget() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="flex items-center gap-1 text-[11px] text-muted">
-            <ArrowDown className="size-3 text-[var(--chart-3)]" /> Download
+            <ArrowDown className="size-3 text-[var(--chart-3)]" />{' '}{t('rete::Download')}
           </div>
           <div className="text-lg font-semibold tabular">{rate(n.rxRate)}</div>
         </div>
         <div>
           <div className="flex items-center gap-1 text-[11px] text-muted">
-            <ArrowUp className="size-3 text-[var(--chart-1)]" /> Upload
+            <ArrowUp className="size-3 text-[var(--chart-1)]" />{' '}{t('Upload')}
           </div>
           <div className="text-lg font-semibold tabular">{rate(n.txRate)}</div>
         </div>
       </div>
-      <div className="mt-1 truncate text-[11px] text-muted">{up.map((i) => i.name).join(', ') || 'Nessuna interfaccia attiva'}</div>
+      <div className="mt-1 truncate text-[11px] text-muted">{up.map((i) => i.name).join(', ') || t('Nessuna interfaccia attiva')}</div>
       <div className="mt-auto pt-2">
         <Sparkline values={(h.data ?? []).map((x) => x.rx + x.tx)} color="var(--chart-3)" />
       </div>
@@ -196,13 +197,13 @@ function HostWidget() {
   return (
     <dl>
       <Kv k="Host">{d.hostname}</Kv>
-      <Kv k="Sistema">{d.os}</Kv>
+      <Kv k={t('Sistema')}>{d.os}</Kv>
       <Kv k="Kernel" mono>{d.kernel}</Kv>
       <Kv k="Uptime">{duration(d.uptime)}</Kv>
-      <Kv k="Load (1/5/15)">
+      <Kv k={t('Load (1/5/15)')}>
         <span className="tabular">{d.load.map((l) => l.toFixed(2)).join(' · ')}</span>
       </Kv>
-      <Kv k="GPU">{d.gpu ?? 'non rilevata'}</Kv>
+      <Kv k="GPU">{d.gpu ?? t('non rilevata')}</Kv>
     </dl>
   );
 }
@@ -213,7 +214,7 @@ function HistoryWidget() {
   if (!h.data) return <Skeleton className="h-full min-h-28 w-full" />;
   return (
     <AreaChart
-      ariaLabel="CPU e memoria nell'ultima ora"
+      ariaLabel={t('CPU e memoria nell’ultima ora')}
       times={h.data.map((x) => x.t)}
       max={100}
       yFormat={(v) => `${Math.round(v)}%`}
@@ -230,7 +231,7 @@ function ContainersWidget() {
   const o = useOverview();
   if (o.isError) return <ErrorBox error={o.error} compact />;
   if (!o.data) return <Loading />;
-  if (!o.data.containers) return <ErrorBox error={{ message: o.data.containersError ?? 'Agent non disponibile', status: 503 }} compact />;
+  if (!o.data.containers) return <ErrorBox error={{ message: o.data.containersError ?? t('Agent non disponibile'), status: 503 }} compact />;
   const c = o.data.containers;
   const sorted = [...c.list].sort((a, b) => {
     const rank = (x: typeof a) => (x.health === 'unhealthy' || x.state !== 'running' ? 0 : 1);
@@ -240,8 +241,8 @@ function ContainersWidget() {
     <div className="flex h-full flex-col">
       <div className="mb-3 grid grid-cols-3 gap-2">
         {[
-          ['Attivi', c.running, 'text-ok'],
-          ['Fermi', c.stopped, c.stopped ? 'text-err' : 'text-fg'],
+          [t('Attivi'), c.running, 'text-ok'],
+          [t('Fermi'), c.stopped, c.stopped ? 'text-err' : 'text-fg'],
           ['Unhealthy', c.unhealthy.length, c.unhealthy.length ? 'text-err' : 'text-fg'],
         ].map(([l, v, cls]) => (
           <div key={l as string} className="rounded-lg bg-surface-2 px-2.5 py-2">
@@ -271,7 +272,7 @@ function LauncherWidget() {
   if (q.isError) return <ErrorBox error={q.error} compact />;
   if (!q.data) return <Loading />;
   if (q.data.length === 0)
-    return <Empty title="Nessuna app nel launcher" action={<Link className="text-xs text-accent hover:underline" to="/app">Aggiungi le app</Link>} />;
+    return <Empty title={t('Nessuna app nel launcher')} action={<Link className="text-xs text-accent hover:underline" to="/app">{t('Aggiungi le app')}</Link>} />;
   return (
     <div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2">
@@ -280,7 +281,7 @@ function LauncherWidget() {
         ))}
       </div>
       <Link to="/app" className="mt-2 inline-block text-xs text-accent hover:underline">
-        {q.data.length > 16 ? `Tutte le ${q.data.length} app` : 'Gestisci le app'}
+        {q.data.length > 16 ? t('Tutte le {n} app', { n: q.data.length }) : t('Gestisci le app')}
       </Link>
     </div>
   );
@@ -294,7 +295,7 @@ function AppsWidget() {
   const apps = o.data.integrations;
   if (apps.length === 0)
     return (
-      <Empty title="Nessuna applicazione collegata" action={<Link className="text-xs text-accent hover:underline" to="/integrazioni">Aggiungi integrazioni</Link>} />
+      <Empty title={t('Nessuna applicazione collegata')} action={<Link className="text-xs text-accent hover:underline" to="/integrazioni">{t('Aggiungi integrazioni')}</Link>} />
     );
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2">
@@ -318,7 +319,7 @@ function AppTile({ app, container }: { app: Integration; container?: { state: st
           target="_blank"
           rel="noreferrer noopener"
           className="text-muted opacity-70 transition-opacity group-hover:opacity-100 hover:text-fg"
-          aria-label={`Apri ${app.name}`}
+          aria-label={t('Apri {name}', { name: app.name })}
         >
           <ExternalLink className="size-3.5" />
         </a>
@@ -340,7 +341,7 @@ function EventsWidget() {
   if (o.isError) return <ErrorBox error={o.error} compact />;
   if (!o.data) return <Loading />;
   const ev = o.data.events;
-  if (ev.length === 0) return <Empty icon={<Siren />} title="Nessun evento registrato">Riavvii, container fermi, problemi di disco e cambi di stato delle integrazioni compariranno qui.</Empty>;
+  if (ev.length === 0) return <Empty icon={<Siren />} title={t('Nessun evento registrato')}>{t('Riavvii, container fermi, problemi di disco e cambi di stato delle integrazioni compariranno qui.')}</Empty>;
   return (
     <ul className="-mx-1 h-full space-y-0.5 overflow-y-auto">
       {ev.map((e) => (
@@ -363,8 +364,8 @@ type Latest = { id: string; name: string; type: string; series: string | null; s
 
 function NotConfigured({ type, label }: { type: string; label: string }) {
   return (
-    <Empty title={`${label} non configurato`} action={<Link className="text-xs text-accent hover:underline" to={`/integrazioni?add=${type}`}>Collega {label}</Link>}>
-      Serve una credenziale dedicata per leggere i dati in sola lettura.
+    <Empty title={t('{name} non configurato', { name: label })} action={<Link className="text-xs text-accent hover:underline" to={`/integrazioni?add=${type}`}>{t('Collega {name}', { name: label })}</Link>}>
+      {t('Serve una credenziale dedicata per leggere i dati in sola lettura.')}
     </Empty>
   );
 }
@@ -374,10 +375,10 @@ function JellyfinWidget() {
   const jf = byType(o.data?.integrations, 'jellyfin');
   const q = useResource<Latest[]>(jf, 'latest', 'limit=12', 60_000);
   if (!o.data) return <Loading />;
-  if (!jf || jf.status === 'unconfigured') return <NotConfigured type="jellyfin" label="Jellyfin" />;
+  if (!jf || jf.status === 'unconfigured') return <NotConfigured type="jellyfin" label={t('Jellyfin')} />;
   if (q.isError) return <ErrorBox error={q.error} compact />;
   if (!q.data) return <Loading />;
-  if (q.data.length === 0) return <Empty title="Libreria vuota" />;
+  if (q.data.length === 0) return <Empty title={t('Libreria vuota')} />;
   return (
     <div className="flex h-full gap-2.5 overflow-x-auto pb-1">
       {q.data.map((i) => (
@@ -395,7 +396,7 @@ function JellyfinWidget() {
           <figcaption className="mt-1.5">
             <div className="truncate text-xs font-medium" title={i.series ?? i.name}>{i.series ?? i.name}</div>
             <div className="truncate text-[11px] text-muted">
-              {i.type === 'Episode' ? `S${String(i.season ?? 0).padStart(2, '0')}E${String(i.episode ?? 0).padStart(2, '0')}` : i.year ?? 'Film'} · {ago(i.added)}
+              {i.type === 'Episode' ? `S${String(i.season ?? 0).padStart(2, '0')}E${String(i.episode ?? 0).padStart(2, '0')}` : i.year ?? t('Film')} · {ago(i.added)}
             </div>
           </figcaption>
         </figure>
@@ -411,7 +412,7 @@ function DownloadsWidget() {
   const qb = byType(o.data?.integrations, 'qbittorrent');
   const q = useResource<Torrent[]>(qb, 'torrents', '', 5_000);
   if (!o.data) return <Loading />;
-  if (!qb || qb.status === 'unconfigured') return <NotConfigured type="qbittorrent" label="qBittorrent" />;
+  if (!qb || qb.status === 'unconfigured') return <NotConfigured type="qbittorrent" label={t('qBittorrent')} />;
   if (q.isError) return <ErrorBox error={q.error} compact />;
   if (!q.data) return <Loading />;
   const active = q.data.filter((t) => !t.complete);
@@ -421,14 +422,14 @@ function DownloadsWidget() {
     <div className="flex h-full flex-col">
       <div className="mb-2 flex gap-3 text-xs text-muted">
         <span>
-          <b className="text-fg tabular">{active.length}</b> in corso
+          <b className="text-fg tabular">{active.length}</b>{' '}{t('in corso')}
         </span>
         <span>
-          <b className="text-fg tabular">{done.length}</b> completati
+          <b className="text-fg tabular">{done.length}</b>{' '}{t('completati')}
         </span>
       </div>
       {show.length === 0 ? (
-        <Empty icon={<Download />} title="Nessun torrent" />
+        <Empty icon={<Download />} title={t('Nessun torrent')} />
       ) : (
         <ul className="min-h-0 flex-1 space-y-2.5 overflow-y-auto">
           {show.map((t) => (
@@ -452,10 +453,10 @@ function MediaQueueWidget() {
   if (!q.data) return <Loading />;
   const c = q.data.counts;
   const tiles: [string, number, string][] = [
-    ['Da rivedere', c.review ?? 0, (c.review ?? 0) ? 'text-warn' : ''],
-    ['Pronti', c.ready ?? 0, (c.ready ?? 0) ? 'text-info' : ''],
-    ['Problemi', (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0), (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0) ? 'text-err' : ''],
-    ['In libreria', c.indexed ?? 0, 'text-ok'],
+    [t('Da rivedere'), c.review ?? 0, (c.review ?? 0) ? 'text-warn' : ''],
+    [t('Pronti'), c.ready ?? 0, (c.ready ?? 0) ? 'text-info' : ''],
+    [t('Problemi'), (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0), (c.conflict ?? 0) + (c.error ?? 0) + (c.missing ?? 0) ? 'text-err' : ''],
+    [t('In libreria'), c.indexed ?? 0, 'text-ok'],
   ];
   return (
     <Link to="/media-automation" className="flex h-full flex-col">
@@ -468,26 +469,26 @@ function MediaQueueWidget() {
         ))}
       </div>
       <div className="mt-auto pt-2 text-[11px] text-muted">
-        Import automatico {q.data.settings.autoImport ? 'attivo' : 'disattivato'} · ultima scansione {ago(q.data.settings.lastScan)}
+        {t('Import automatico {state} · ultima scansione {when}', { state: q.data.settings.autoImport ? t('attivo') : t('disattivato'), when: ago(q.data.settings.lastScan) })}
       </div>
     </Link>
   );
 }
 
 export const WIDGETS: Record<string, WidgetDef> = {
-  mediaQueue: { title: 'Coda media', icon: <Wand2 />, description: 'Download da classificare e importare', size: { w: 4, h: 6, minW: 3, minH: 5 }, Component: MediaQueueWidget },
-  cpu: { title: 'CPU', icon: <Cpu />, description: 'Utilizzo, temperatura e load', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: CpuWidget },
-  memory: { title: 'Memoria', icon: <MemoryStick />, description: 'RAM e swap', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: MemoryWidget },
-  disk: { title: 'Dischi', icon: <HardDrive />, description: 'Spazio occupato', size: { w: 3, h: 5, minW: 3, minH: 3 }, Component: DiskWidget },
-  network: { title: 'Rete', icon: <Network />, description: 'Traffico in tempo reale', size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: NetworkWidget },
-  history: { title: 'Ultima ora', icon: <History />, description: 'Andamento CPU e RAM', size: { w: 8, h: 7, minW: 4, minH: 5 }, Component: HistoryWidget },
-  host: { title: 'Host', icon: <Server />, description: 'Sistema, kernel, uptime', size: { w: 4, h: 7, minW: 3, minH: 5 }, Component: HostWidget },
-  launcher: { title: 'App', icon: <AppWindow />, description: 'Le app del launcher, con stato', size: { w: 8, h: 5, minW: 3, minH: 3 }, Component: LauncherWidget },
-  apps: { title: 'Applicazioni', icon: <LayoutGrid />, description: 'Stato delle app collegate', size: { w: 8, h: 6, minW: 4, minH: 4 }, Component: AppsWidget },
-  containers: { title: 'Container', icon: <Boxes />, description: 'Salute dei container Docker', size: { w: 4, h: 11, minW: 3, minH: 6 }, Component: ContainersWidget },
-  jellyfin: { title: 'Aggiunti di recente', icon: <Clapperboard />, description: 'Ultimi contenuti Jellyfin', size: { w: 8, h: 6, minW: 4, minH: 5 }, Component: JellyfinWidget },
-  downloads: { title: 'Download', icon: <Download />, description: 'Torrent qBittorrent', size: { w: 6, h: 7, minW: 3, minH: 4 }, Component: DownloadsWidget },
-  events: { title: 'Eventi recenti', icon: <Siren />, description: 'Riavvii, errori, avvisi', size: { w: 6, h: 7, minW: 3, minH: 4 }, Component: EventsWidget },
+  mediaQueue: { title: t('Coda media'), icon: <Wand2 />, description: t('Download da classificare e importare'), size: { w: 4, h: 6, minW: 3, minH: 5 }, Component: MediaQueueWidget },
+  cpu: { title: t('CPU'), icon: <Cpu />, description: t('Utilizzo, temperatura e load'), size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: CpuWidget },
+  memory: { title: t('Memoria'), icon: <MemoryStick />, description: t('RAM e swap'), size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: MemoryWidget },
+  disk: { title: t('Dischi'), icon: <HardDrive />, description: t('Spazio occupato'), size: { w: 3, h: 5, minW: 3, minH: 3 }, Component: DiskWidget },
+  network: { title: t('Rete'), icon: <Network />, description: t('Traffico in tempo reale'), size: { w: 3, h: 5, minW: 3, minH: 4 }, Component: NetworkWidget },
+  history: { title: t('Ultima ora'), icon: <History />, description: t('Andamento CPU e RAM'), size: { w: 8, h: 7, minW: 4, minH: 5 }, Component: HistoryWidget },
+  host: { title: t('Host'), icon: <Server />, description: t('Sistema, kernel, uptime'), size: { w: 4, h: 7, minW: 3, minH: 5 }, Component: HostWidget },
+  launcher: { title: t('App'), icon: <AppWindow />, description: t('Le app del launcher, con stato'), size: { w: 8, h: 5, minW: 3, minH: 3 }, Component: LauncherWidget },
+  apps: { title: t('Applicazioni'), icon: <LayoutGrid />, description: t('Stato delle app collegate'), size: { w: 8, h: 6, minW: 4, minH: 4 }, Component: AppsWidget },
+  containers: { title: t('Container'), icon: <Boxes />, description: t('Salute dei container Docker'), size: { w: 4, h: 11, minW: 3, minH: 6 }, Component: ContainersWidget },
+  jellyfin: { title: t('Aggiunti di recente'), icon: <Clapperboard />, description: t('Ultimi contenuti Jellyfin'), size: { w: 8, h: 6, minW: 4, minH: 5 }, Component: JellyfinWidget },
+  downloads: { title: t('Download'), icon: <Download />, description: t('Torrent qBittorrent'), size: { w: 6, h: 7, minW: 3, minH: 4 }, Component: DownloadsWidget },
+  events: { title: t('Eventi recenti'), icon: <Siren />, description: t('Riavvii, errori, avvisi'), size: { w: 6, h: 7, minW: 3, minH: 4 }, Component: EventsWidget },
 };
 
 export const DEFAULT_LAYOUT = [
@@ -508,7 +509,7 @@ export const DEFAULT_LAYOUT = [
 
 export function WidgetFrame({ type, editing, onRemove }: { type: string; editing: boolean; onRemove: () => void }) {
   const def = WIDGETS[type];
-  if (!def) return <Card title="Widget sconosciuto">—</Card>;
+  if (!def) return <Card title={t('Widget sconosciuto')}>—</Card>;
   return (
     <Card
       title={def.title}
@@ -518,8 +519,8 @@ export function WidgetFrame({ type, editing, onRemove }: { type: string; editing
       bodyClassName="overflow-hidden"
       actions={
         editing ? (
-          <button onClick={onRemove} className="rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-err-soft hover:text-err" aria-label={`Rimuovi ${def.title}`}>
-            Rimuovi
+          <button onClick={onRemove} className="rounded-md px-1.5 py-0.5 text-xs text-muted hover:bg-err-soft hover:text-err" aria-label={t('Rimuovi {name}', { name: def.title })}>
+            {t('Rimuovi')}
           </button>
         ) : undefined
       }

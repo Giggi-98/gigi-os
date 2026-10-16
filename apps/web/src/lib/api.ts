@@ -1,3 +1,4 @@
+import { t } from './i18n';
 // Client API: cookie di sessione HttpOnly + header CSRF per le mutazioni. Nessun token in localStorage.
 let csrf: string | null = null;
 export const setCsrf = (t: string | null) => (csrf = t);
@@ -29,7 +30,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
       signal: init.signal,
     });
   } catch {
-    throw new ApiError('GIGI OS non raggiungibile', 0);
+    throw new ApiError(t('GIGI OS non raggiungibile'), 0);
   }
   const text = await res.text();
   let body: unknown = null;
@@ -49,7 +50,7 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
 
 // ───────── Tipi condivisi con l'API ─────────
 export type Role = 'admin' | 'operator' | 'viewer';
-export const ROLE_LABEL: Record<Role, string> = { admin: 'Amministratore', operator: 'Operatore', viewer: 'Sola lettura' };
+export const ROLE_LABEL: Record<Role, string> = { admin: t('Amministratore'), operator: t('Operatore'), viewer: t('Sola lettura') };
 export type User = {
   id: string;
   username: string;

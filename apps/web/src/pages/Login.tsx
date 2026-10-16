@@ -1,3 +1,4 @@
+import { t, tr } from '../lib/i18n';
 import { ArrowLeft, KeyRound, Loader2, ShieldCheck, Smartphone } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api, ApiError, type LoginResult, type User } from '../lib/api';
@@ -21,7 +22,7 @@ export function Login({ setup }: { setup: boolean }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (setup && password !== confirm) return setError(new Error('Le password non coincidono'));
+    if (setup && password !== confirm) return setError(new Error(t('Le password non coincidono')));
     setBusy(true);
     try {
       const r = await api<LoginResult>(setup ? '/auth/setup' : '/auth/login', {
@@ -46,7 +47,7 @@ export function Login({ setup }: { setup: boolean }) {
     try {
       const r = await api<{ user: User; recoveryLeft?: number }>('/auth/login/mfa', { method: 'POST', body: { ticket, code } });
       if (r.recoveryLeft !== undefined)
-        toast(r.recoveryLeft <= 3 ? 'err' : 'info', `Codice di recupero usato: ne restano ${r.recoveryLeft}. Puoi generarne di nuovi in Sicurezza.`);
+        toast(r.recoveryLeft <= 3 ? 'err' : 'info', t('Codice di recupero usato: ne restano {n}. Puoi generarne di nuovi in Sicurezza.', { n: r.recoveryLeft }));
       setUser(r.user);
     } catch (err) {
       if (err instanceof ApiError && (err.body as { code?: string })?.code === 'ticket_expired') {
@@ -65,16 +66,16 @@ export function Login({ setup }: { setup: boolean }) {
         <div className="w-full max-w-sm">
           <div className="mb-7 flex flex-col items-center text-center">
             <img src="/favicon.svg" alt="" className="mb-4 size-12" />
-            <h1 className="text-xl font-semibold tracking-tight">Verifica in due passaggi</h1>
-            <p className="mt-1 text-sm text-muted">{useRecovery ? 'Inserisci uno dei codici di recupero salvati.' : 'Apri l’app di autenticazione sul telefono.'}</p>
+            <h1 className="text-xl font-semibold tracking-tight">{t('Verifica in due passaggi')}</h1>
+            <p className="mt-1 text-sm text-muted">{useRecovery ? t('Inserisci uno dei codici di recupero salvati.') : t('Apri l’app di autenticazione sul telefono.')}</p>
           </div>
           <form onSubmit={submitCode} className="space-y-4 rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow)' }}>
-            <Field label={useRecovery ? 'Codice di recupero' : `Codice a 6 cifre per ${username}`}>
+            <Field label={useRecovery ? t('Codice di recupero') : t('Codice a 6 cifre per {user}', { user: username })}>
               {(id) => <CodeInput id={id} value={code} onChange={setCode} recovery={useRecovery} />}
             </Field>
             {error !== null && <ErrorBox error={error} compact />}
             <Button type="submit" variant="primary" className="w-full" disabled={busy || (!useRecovery && code.length !== 6)}>
-              {busy ? <Loader2 className="animate-spin" /> : <ShieldCheck />} Verifica
+              {busy ? <Loader2 className="animate-spin" /> : <ShieldCheck />} {t('Verifica')}
             </Button>
             <div className="flex items-center justify-between text-xs">
               <button
@@ -86,7 +87,7 @@ export function Login({ setup }: { setup: boolean }) {
                   setError(null);
                 }}
               >
-                <ArrowLeft className="size-3.5" /> Indietro
+                <ArrowLeft className="size-3.5" />{' '}{t('Indietro')}
               </button>
               <button
                 type="button"
@@ -97,7 +98,7 @@ export function Login({ setup }: { setup: boolean }) {
                 }}
               >
                 {useRecovery ? <Smartphone className="size-3.5" /> : <KeyRound className="size-3.5" />}
-                {useRecovery ? 'Usa l’app' : 'Usa un codice di recupero'}
+                {useRecovery ? t('Usa l’app') : t('Usa un codice di recupero')}
               </button>
             </div>
           </form>
@@ -110,21 +111,21 @@ export function Login({ setup }: { setup: boolean }) {
       <div className="w-full max-w-sm">
         <div className="mb-7 flex flex-col items-center text-center">
           <img src="/favicon.svg" alt="" className="mb-4 size-12" />
-          <h1 className="text-xl font-semibold tracking-tight">{setup ? 'Configura GIGI OS' : 'Accedi a GIGI OS'}</h1>
-          <p className="mt-1 text-sm text-muted">{setup ? 'Crea il primo account amministratore.' : 'Homelab control center'}</p>
+          <h1 className="text-xl font-semibold tracking-tight">{setup ? t('Configura GIGI OS') : t('Accedi a GIGI OS')}</h1>
+          <p className="mt-1 text-sm text-muted">{setup ? t('Crea il primo account amministratore.') : 'Homelab control center'}</p>
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow)' }}>
           {setup && (
-            <Field label="Codice di setup" help={<>Lo trovi con <code className="font-mono">docker logs gigi-api</code>. È monouso.</>}>
+            <Field label={t('Codice di setup')} help={tr('Lo trovi con {cmd}. È monouso.', { cmd: <code className="font-mono">docker logs gigi-api</code> })}>
               {(id) => <Input id={id} value={token} onChange={(e) => setToken(e.target.value)} autoComplete="one-time-code" required autoFocus />}
             </Field>
           )}
-          <Field label="Nome utente">
+          <Field label={t('Nome utente')}>
             {(id) => (
               <Input id={id} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required autoFocus={!setup} minLength={3} />
             )}
           </Field>
-          <Field label="Password" help={setup ? 'Almeno 12 caratteri. Una frase lunga è l’ideale.' : undefined}>
+          <Field label={t('Password')} help={setup ? t('Almeno 12 caratteri. Una frase lunga è l’ideale.') : undefined}>
             {(id) => (
               <Input
                 id={id}
@@ -138,17 +139,17 @@ export function Login({ setup }: { setup: boolean }) {
             )}
           </Field>
           {setup && (
-            <Field label="Conferma password">
+            <Field label={t('Conferma password')}>
               {(id) => <Input id={id} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />}
             </Field>
           )}
           {error !== null && <ErrorBox error={error} compact />}
           <Button type="submit" variant="primary" className="w-full" disabled={busy}>
             {busy ? <Loader2 className="animate-spin" /> : setup ? <ShieldCheck /> : <KeyRound />}
-            {setup ? 'Crea amministratore' : 'Accedi'}
+            {setup ? t('Crea amministratore') : t('Accedi')}
           </Button>
         </form>
-        <p className="mt-4 text-center text-xs text-muted">Accesso consentito solo dalla rete locale.</p>
+        <p className="mt-4 text-center text-xs text-muted">{t('Accesso consentito solo dalla rete locale.')}</p>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { locale } from '../lib/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { Boxes, Cog, Cpu, HardDrive, Lock, Network, Search, Thermometer } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -282,7 +283,7 @@ const days = (n: number) => (n > 365 ? 'oltre un anno' : n <= 1 ? 'meno di un gi
 export function forecastText(f: DiskForecast): { text: string; tone: Tone } {
   switch (f.status) {
     case 'insufficient':
-      return { text: `Previsione dopo 3 giorni di storico (finora ${f.dataDays.toLocaleString('it-IT')} g)`, tone: 'idle' };
+      return { text: `Previsione dopo 3 giorni di storico (finora ${f.dataDays.toLocaleString(locale)} g)`, tone: 'idle' };
     case 'stable':
       return { text: 'Occupazione stabile negli ultimi 14 giorni', tone: 'ok' };
     case 'shrinking':
@@ -508,7 +509,7 @@ function ServiceDialog({ name, onClose }: { name: string; onClose: () => void })
             <div className="max-h-72 overflow-auto rounded-xl border border-line bg-[#07080b] p-2.5 font-mono text-[11px] leading-5 text-[#d7dae0]">
               {j.data.length === 0 ? <span className="text-[#7a8291]">Nessuna riga.</span> : j.data.map((l, k) => (
                 <div key={k} className={cx('whitespace-pre-wrap break-all', ['emerg', 'alert', 'crit', 'err'].includes(l.priority) ? 'text-[#f6a5ad]' : l.priority === 'warning' ? 'text-[#f5d08a]' : '')}>
-                  <span className="text-[#5d6574]">{new Date(l.ts).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })} </span>
+                  <span className="text-[#5d6574]">{new Date(l.ts).toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })} </span>
                   {l.message}
                 </div>
               ))}

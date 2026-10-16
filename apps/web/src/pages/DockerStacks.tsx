@@ -1,5 +1,6 @@
 // Stack compose: elenco, wizard di creazione/modifica e azioni sugli stack creati da GIGI OS (D-025).
 // Gli stack creati fuori da GIGI OS (jellyfin, armony, …) sono mostrati in sola lettura.
+import { locale } from '../lib/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -534,7 +535,7 @@ function StackWizard({ edit, onClose }: { edit: StackDetail | null; onClose: () 
               spellCheck={false}
               aria-label="Contenuto del compose"
             />
-            <p className="mt-1.5 text-[11px] text-muted">{compose.length.toLocaleString('it-IT')} caratteri · indenta con spazi, non con tabulazioni</p>
+            <p className="mt-1.5 text-[11px] text-muted">{compose.length.toLocaleString(locale)} caratteri · indenta con spazi, non con tabulazioni</p>
           </Card>
           <Card
             title="Variabili (.env)"

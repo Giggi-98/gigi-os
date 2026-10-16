@@ -261,3 +261,15 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Correzione collegata.** Il primo `npm audit` ha trovato una vulnerabilità alta e tre moderate in `@fastify/static` 8 (aggiramento delle protezioni delle route con percorsi non canonici) e una moderata in `uuid` tramite `dockerode` 4. Aggiornati a `@fastify/static` 10.1.6 e `dockerode` 5.0.1: 0 vulnerabilità, test verdi, lettura di container, statistiche, log e digest provata sul Docker reale.
 **Alternative scartate.** Installer `curl | sh` (si esegue codice non letto e senza la repo a portata di mano). Script in bash (meno portabile su Alpine e Debian minimale). Watchtower per gli aggiornamenti (vedi D-032).
 **Da rivedere se** serve un installer senza git (archivio della release) o il rilevamento automatico delle librerie da Jellyfin.
+
+## D-035 — Interfaccia in italiano e inglese (2026-10-16)
+
+**Contesto.** Scelta dell’utente: inglese e italiano completo per la repo pubblica, inglese predefinito. Circa 1.500 testi nell’interfaccia e 250 messaggi dell’API, tutti scritti in italiano dentro il codice.
+**Scelta.**
+- Modulo `lib/i18n.ts` scritto in casa (nessuna dipendenza). Il **testo italiano è la chiave**: `t('Testo')`, con variabili `{nome}`, plurali `tn(n, 'singolare', 'plurale')` tramite `Intl.PluralRules`, frasi con elementi React `tr('… {cmd} …', { cmd: <code/> })`, chiavi con contesto `contesto::Testo` per le parole con più significati e `tk()` per le chiavi usate in modo dinamico. L’inglese sta in `apps/web/src/i18n/en.json`.
+- Lingua: scelta salvata nel browser, altrimenti quella del browser (italiano se presente, inglese negli altri casi). Si cambia dall’intestazione, o dal menu sul telefono, e la pagina si ricarica. Date e numeri seguono la lingua (`Intl`, `locale`).
+- Controllo: `scripts/dev/i18n.mjs` e `tests/i18n.test.mjs` falliscono se manca una traduzione, se le variabili non coincidono, se una chiave non è usata, o se in un file già convertito resta testo nel JSX. La conversione dei file si fa con `scripts/dev/i18n-codemod.mjs`, che lavora sull’albero sintattico TypeScript e non riformatta.
+- Avanzamento: prima le parti comuni (menu, intestazione, componenti, ricerca, login, 2FA, dashboard e widget: 213 testi). Poi una pagina alla volta; infine i messaggi dell’API, gli eventi, il bot e il digest.
+**Alternative scartate.** `react-i18next`/`i18next` (circa 40 kB e un contesto da propagare ovunque, anche alle etichette definite fuori dai componenti). Chiavi semantiche (`nav.dashboard`): andrebbero inventati e mantenuti 1.500 nomi, e un testo non ancora tradotto non sarebbe leggibile.
+**Limite noto.** Eventi e messaggi delle integrazioni arrivano dal server già in italiano, e lo restano finché non si converte l’API: gli eventi andranno salvati come chiave più variabili, non come testo.
+**Da rivedere se** si aggiungono altre lingue (servirà un dizionario anche per l’italiano e un fallback per lingua) o traduzioni dalla comunità (formato standard come JSON di i18next o PO).

@@ -1,4 +1,5 @@
 // Configurazione della verifica in due passaggi (D-029): password → QR e codice → codici di recupero.
+import { locale, t } from '../lib/i18n';
 import { Check, Copy, Download, KeyRound, LogOut, ShieldCheck, Smartphone } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -14,7 +15,7 @@ export function CodeInput({ id, value, onChange, recovery = false }: { id: strin
       onChange={(e) => onChange(recovery ? e.target.value.slice(0, 20) : e.target.value.replace(/\D/g, '').slice(0, 6))}
       inputMode={recovery ? 'text' : 'numeric'}
       autoComplete="one-time-code"
-      placeholder={recovery ? '123456 oppure ABCD-EFGH' : '123456'}
+      placeholder={recovery ? t('123456 oppure ABCD-EFGH') : '123456'}
       className="font-mono tracking-[0.3em]"
       required
     />
@@ -23,10 +24,10 @@ export function CodeInput({ id, value, onChange, recovery = false }: { id: strin
 
 export function RecoveryCodes({ codes }: { codes: string[] }) {
   const [copied, setCopied] = useState(false);
-  const text = `GIGI OS — codici di recupero (${new Date().toLocaleString('it-IT')})\nOgni codice vale una sola volta.\n\n${codes.join('\n')}\n`;
+  const text = `${t('GIGI OS — codici di recupero ({date})', { date: new Date().toLocaleString(locale) })}\n${t('Ogni codice vale una sola volta.')}\n\n${codes.join('\n')}\n`;
   return (
     <div>
-      <ul className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface-2 p-3 font-mono text-sm tabular" aria-label="Codici di recupero">
+      <ul className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface-2 p-3 font-mono text-sm tabular" aria-label={t('Codici di recupero')}>
         {codes.map((c) => (
           <li key={c}>{c}</li>
         ))}
@@ -50,7 +51,7 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
             URL.revokeObjectURL(a.href);
           }}
         >
-          <Download /> Scarica .txt
+          <Download />{' '}{t('Scarica .txt')}
         </Button>
       </div>
     </div>
@@ -97,13 +98,13 @@ export function MfaEnroll({ onDone }: { onDone: () => void }) {
           setStep('scan');
         })}
       >
-        <p className="text-[13px] text-fg-2">Serve un’app di autenticazione sul telefono: Aegis, 2FAS, Google Authenticator, Microsoft Authenticator o il portachiavi del telefono.</p>
-        <Field label="Conferma la tua password">
+        <p className="text-[13px] text-fg-2">{t('Serve un’app di autenticazione sul telefono: Aegis, 2FAS, Google Authenticator, Microsoft Authenticator o il portachiavi del telefono.')}</p>
+        <Field label={t('Conferma la tua password')}>
           {(id) => <Input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required autoFocus />}
         </Field>
         {error !== null && <ErrorBox error={error} compact />}
         <Button type="submit" variant="primary" loading={busy}>
-          <KeyRound /> Continua
+          <KeyRound />{' '}{t('Continua')}
         </Button>
       </form>
     );
@@ -120,21 +121,21 @@ export function MfaEnroll({ onDone }: { onDone: () => void }) {
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <div className="mx-auto shrink-0 rounded-xl bg-white p-1 sm:mx-0">
-            {qr ? <img src={qr} alt="Codice QR da inquadrare con l’app di autenticazione" width={208} height={208} /> : <div className="size-[208px]" />}
+            {qr ? <img src={qr} alt={t('Codice QR da inquadrare con l’app di autenticazione')} width={208} height={208} /> : <div className="size-[208px]" />}
           </div>
           <div className="min-w-0 space-y-2 text-[13px] text-fg-2">
             <p>
               <Smartphone className="mr-1 inline size-4 align-[-3px]" />
-              Nell’app scegli «Aggiungi account» e inquadra il codice.
+              {t('Nell’app scegli «Aggiungi account» e inquadra il codice.')}
             </p>
-            <p className="text-muted">Non puoi inquadrarlo? Inserisci a mano questa chiave (tipo: basata sul tempo):</p>
+            <p className="text-muted">{t('Non puoi inquadrarlo? Inserisci a mano questa chiave (tipo: basata sul tempo):')}</p>
             <code className="block rounded-lg bg-surface-2 px-2.5 py-2 font-mono text-xs break-all select-all">{secret.secret.match(/.{1,4}/g)?.join(' ')}</code>
           </div>
         </div>
-        <Field label="Codice a 6 cifre mostrato dall’app">{(id) => <CodeInput id={id} value={code} onChange={setCode} />}</Field>
+        <Field label={t('Codice a 6 cifre mostrato dall’app')}>{(id) => <CodeInput id={id} value={code} onChange={setCode} />}</Field>
         {error !== null && <ErrorBox error={error} compact />}
         <Button type="submit" variant="primary" loading={busy} disabled={code.length !== 6}>
-          <ShieldCheck /> Attiva
+          <ShieldCheck />{' '}{t('Attiva')}
         </Button>
       </form>
     );
@@ -142,16 +143,15 @@ export function MfaEnroll({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-[13px] text-fg-2">
-        <strong className="font-medium text-fg">Verifica attiva.</strong> Salva questi codici di recupero fuori da questo PC (gestore di password, foglio stampato). Servono se perdi il telefono:
-        ognuno vale una volta e non verranno più mostrati.
+        <strong className="font-medium text-fg">{t('Verifica attiva.')}</strong>{' '}{t('Salva questi codici di recupero fuori da questo PC (gestore di password, foglio stampato). Servono se perdi il telefono: ognuno vale una volta e non verranno più mostrati.')}
       </div>
       <RecoveryCodes codes={codes} />
       <label className="flex items-center gap-2 text-[13px]">
         <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="size-4 [--check:var(--accent)]" />
-        Ho salvato i codici in un posto sicuro
+        {t('Ho salvato i codici in un posto sicuro')}
       </label>
       <Button variant="primary" disabled={!saved} onClick={onDone}>
-        <Check /> Fatto
+        <Check />{' '}{t('Fatto')}
       </Button>
     </div>
   );
@@ -165,9 +165,9 @@ export function MfaRequiredPage() {
       <div className="w-full max-w-lg">
         <div className="mb-6 flex flex-col items-center text-center">
           <img src="/favicon.svg" alt="" className="mb-4 size-12" />
-          <h1 className="text-xl font-semibold tracking-tight">Attiva la verifica in due passaggi</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t('Attiva la verifica in due passaggi')}</h1>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Il ruolo {user ? ROLE_LABEL[user.role].toLowerCase() : ''} può modificare il server: oltre alla password serve un codice dal telefono. Ci vuole un minuto.
+            {t('Il ruolo {role} può modificare il server: oltre alla password serve un codice dal telefono. Ci vuole un minuto.', { role: user ? ROLE_LABEL[user.role].toLowerCase() : '' })}
           </p>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-5" style={{ boxShadow: 'var(--shadow)' }}>
@@ -175,7 +175,7 @@ export function MfaRequiredPage() {
         </div>
         <div className="mt-4 text-center">
           <Button variant="ghost" size="sm" onClick={() => void logout()}>
-            <LogOut /> Esci ({user?.username})
+            <LogOut /> {t('Esci ({user})', { user: user?.username ?? '' })}
           </Button>
         </div>
       </div>

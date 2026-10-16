@@ -1,13 +1,14 @@
 // Tile del launcher, condiviso da pagina App, widget e Ctrl+K.
 import { ExternalLink } from 'lucide-react';
 import type { AppStatus, LauncherApp } from '../lib/api';
+import { t } from '../lib/i18n';
 import { cx, Dot, type Tone } from './ui';
 
 export const APP_STATUS: Record<AppStatus, { tone: Tone; label: string }> = {
-  online: { tone: 'ok', label: 'Online' },
-  degraded: { tone: 'warn', label: 'Con problemi' },
-  offline: { tone: 'err', label: 'Offline' },
-  unknown: { tone: 'idle', label: 'Non verificata' },
+  online: { tone: 'ok', label: t('Online') },
+  degraded: { tone: 'warn', label: t('Con problemi') },
+  offline: { tone: 'err', label: t('Offline') },
+  unknown: { tone: 'idle', label: t('Non verificata') },
 };
 
 export const hostOf = (url: string) => {
@@ -44,7 +45,7 @@ export function LauncherTile({ app, compact = false, children }: { app: Launcher
           target="_blank"
           rel="noopener noreferrer"
           className="block truncate text-[13px] font-medium after:absolute after:inset-0 after:rounded-xl focus:outline-none"
-          title={`Apri ${app.name} (${app.url})`}
+          title={t('Apri {name} ({url})', { name: app.name, url: app.url })}
         >
           {app.name}
         </a>

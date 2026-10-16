@@ -1,3 +1,4 @@
+import { locale } from '../lib/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowUpDown, Lock, Pause, Play, Power, RotateCw, Search, Square, Trash2, WrapText, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -528,7 +529,7 @@ function Logs({ name }: { name: string }) {
         ) : (
           shown.map((l, i) => (
             <div key={i} className={cx('flex gap-3', wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre')}>
-              <span className="shrink-0 text-[#5d6574] select-none">{l.ts ? new Date(l.ts).toLocaleTimeString('it-IT') : ''}</span>
+              <span className="shrink-0 text-[#5d6574] select-none">{l.ts ? new Date(l.ts).toLocaleTimeString(locale) : ''}</span>
               <span className={l.stream === 'stderr' ? 'text-[#f6a5ad]' : undefined}>{l.line}</span>
             </div>
           ))

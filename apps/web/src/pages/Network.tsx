@@ -1,5 +1,6 @@
 // Rete (D-026): schede rilevate, servizi in ascolto, firewall, connessioni, test, dispositivi in LAN.
 // Tutto in sola lettura sull'host: le modifiche a IP e regole UFW non sono disponibili (vedi LEGGIMI).
+import { locale } from '../lib/i18n';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cable, Gauge, Globe, Moon, Pencil, Play, Power, Radar, RefreshCw, Router, ShieldAlert, ShieldCheck, Trash2, Wifi, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
@@ -456,7 +457,7 @@ function FirewallTab() {
                   <tbody>
                     {b.data.recent.slice(0, 50).map((r, i) => (
                       <tr key={i} className="border-b border-line/60 last:border-0">
-                        <td className="px-2 py-1 text-muted">{new Date(r.t).toLocaleTimeString('it-IT')}</td>
+                        <td className="px-2 py-1 text-muted">{new Date(r.t).toLocaleTimeString(locale)}</td>
                         <td className="px-2 py-1">{r.src}</td>
                         <td className="px-2 py-1 text-muted">→</td>
                         <td className="px-2 py-1">{r.dst}:{r.dport || '—'}</td>
@@ -782,7 +783,7 @@ function DevicesTab() {
                       )}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-xs">{d.mac}{d.randomMac && <span className="ml-1.5 font-sans text-[11px] text-muted">(casuale)</span>}</td>
-                    <td className="px-3 py-1.5 text-xs whitespace-nowrap text-muted">{d.firstSeen ? `dal ${new Date(d.firstSeen).toLocaleDateString('it-IT')} · ${ago(d.lastSeen)}` : 'non ancora registrato'}</td>
+                    <td className="px-3 py-1.5 text-xs whitespace-nowrap text-muted">{d.firstSeen ? `dal ${new Date(d.firstSeen).toLocaleDateString(locale)} · ${ago(d.lastSeen)}` : 'non ancora registrato'}</td>
                     <td className="px-4 py-1.5 text-right whitespace-nowrap">
                       <Button size="icon" variant="ghost" aria-label={`Rinomina ${d.ip}`} onClick={() => setEdit({ mac: d.mac, name: d.name ?? '' })}><Pencil /></Button>
                       <Button size="icon" variant="ghost" aria-label={`Accendi ${d.name ?? d.ip} (Wake-on-LAN)`} title="Wake-on-LAN" onClick={() => wake.mutate(d.mac)}><Power /></Button>

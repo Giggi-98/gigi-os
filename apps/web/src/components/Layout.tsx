@@ -21,9 +21,11 @@ import {
   Download,
   LayoutGrid,
   CircleArrowUp,
+  Languages,
   Search,
   X,
 } from 'lucide-react';
+import { lang, setLang, t } from '../lib/i18n';
 import { CommandPalette, usePaletteShortcut } from './CommandPalette';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
@@ -37,38 +39,38 @@ import { Badge, Button, cx, Dot } from './ui';
 type Item = { to: string; label: string; icon: ReactNode; soon?: boolean; requires?: string };
 export const NAV: { group: string; items: Item[] }[] = [
   {
-    group: 'Panoramica',
+    group: t('Panoramica'),
     items: [
-      { to: '/', label: 'Dashboard', icon: <LayoutDashboard /> },
-      { to: '/app', label: 'App', icon: <LayoutGrid /> },
+      { to: '/', label: t('Dashboard'), icon: <LayoutDashboard /> },
+      { to: '/app', label: t('App'), icon: <LayoutGrid /> },
     ],
   },
   {
-    group: 'Infrastruttura',
+    group: t('Infrastruttura'),
     items: [
-      { to: '/sistema', label: 'Sistema', icon: <Server /> },
-      { to: '/aggiornamenti', label: 'Aggiornamenti', icon: <CircleArrowUp /> },
-      { to: '/rete', label: 'Rete', icon: <Network /> },
-      { to: '/docker', label: 'Docker', icon: <Boxes /> },
-      { to: '/file', label: 'File', icon: <FolderTree /> },
+      { to: '/sistema', label: t('Sistema'), icon: <Server /> },
+      { to: '/aggiornamenti', label: t('Aggiornamenti'), icon: <CircleArrowUp /> },
+      { to: '/rete', label: t('Rete'), icon: <Network /> },
+      { to: '/docker', label: t('Docker'), icon: <Boxes /> },
+      { to: '/file', label: t('File'), icon: <FolderTree /> },
     ],
   },
   {
-    group: 'Servizi',
+    group: t('Servizi'),
     items: [
-      { to: '/media', label: 'Media', icon: <Clapperboard /> },
-      { to: '/download', label: 'Download', icon: <Download /> },
-      { to: '/media-automation', label: 'Media automation', icon: <Wand2 /> },
-      { to: '/armony', label: 'Armony', icon: <Music2 />, requires: 'armony' },
+      { to: '/media', label: t('Media'), icon: <Clapperboard /> },
+      { to: '/download', label: t('Download'), icon: <Download /> },
+      { to: '/media-automation', label: t('Media automation'), icon: <Wand2 /> },
+      { to: '/armony', label: t('Armony'), icon: <Music2 />, requires: 'armony' },
     ],
   },
   {
-    group: 'Configurazione',
+    group: t('Configurazione'),
     items: [
-      { to: '/automazioni', label: 'Automazioni', icon: <Workflow /> },
-      { to: '/integrazioni', label: 'Integrazioni', icon: <PlugZap /> },
-      { to: '/sicurezza', label: 'Sicurezza', icon: <ShieldCheck /> },
-      { to: '/backup', label: 'Backup', icon: <DatabaseBackup /> },
+      { to: '/automazioni', label: t('Automazioni'), icon: <Workflow /> },
+      { to: '/integrazioni', label: t('Integrazioni'), icon: <PlugZap /> },
+      { to: '/sicurezza', label: t('Sicurezza'), icon: <ShieldCheck /> },
+      { to: '/backup', label: t('Backup'), icon: <DatabaseBackup /> },
     ],
   },
 ];
@@ -113,17 +115,17 @@ export function Layout() {
   const hostTone = overview.isError ? 'err' : problems > 0 ? 'warn' : sys ? 'ok' : 'idle';
 
   const sidebar = (mobile: boolean) => (
-    <nav aria-label="Navigazione principale" className="flex h-full flex-col">
+    <nav aria-label={t('Navigazione principale')} className="flex h-full flex-col">
       <div className={cx('flex h-14 items-center gap-2.5 px-4', collapsed && !mobile && 'justify-center px-0')}>
         <img src="/favicon.svg" alt="" className="size-7" />
         {(!collapsed || mobile) && (
           <div className="leading-tight">
-            <div className="text-[13px] font-semibold tracking-tight">GIGI OS</div>
-            <div className="text-[11px] text-muted">Homelab control center</div>
+            <div className="text-[13px] font-semibold tracking-tight">{t('GIGI OS')}</div>
+            <div className="text-[11px] text-muted">{t('Homelab control center')}</div>
           </div>
         )}
         {mobile && (
-          <Button variant="ghost" size="icon" className="ml-auto" onClick={() => setMobileOpen(false)} aria-label="Chiudi menu">
+          <Button variant="ghost" size="icon" className="ml-auto" onClick={() => setMobileOpen(false)} aria-label={t('Chiudi menu')}>
             <X />
           </Button>
         )}
@@ -150,7 +152,7 @@ export function Layout() {
                   >
                     {it.icon}
                     {(!collapsed || mobile) && <span className="flex-1 truncate">{it.label}</span>}
-                    {(!collapsed || mobile) && it.soon && <Badge className="!text-[10px]">presto</Badge>}
+                    {(!collapsed || mobile) && it.soon && <Badge className="!text-[10px]">{t('presto')}</Badge>}
                   </NavLink>
                 </li>
               ))}
@@ -158,6 +160,14 @@ export function Layout() {
           </div>
         ))}
       </div>
+      {mobile && (
+        // Sul telefono la lingua si cambia da qui: nell'intestazione non c'è spazio
+        <div className="border-t border-line p-2.5">
+          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setLang(lang === 'it' ? 'en' : 'it')}>
+            <Languages /> {lang === 'it' ? 'English' : 'Italiano'}
+          </Button>
+        </div>
+      )}
       {!mobile && (
         <div className="border-t border-line p-2.5">
           <Button
@@ -165,10 +175,10 @@ export function Layout() {
             size="sm"
             className={cx('w-full', collapsed ? 'justify-center' : 'justify-start')}
             onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? 'Espandi barra laterale' : 'Comprimi barra laterale'}
+            aria-label={collapsed ? t('Espandi barra laterale') : t('Comprimi barra laterale')}
           >
             {collapsed ? <ChevronsRight /> : <ChevronsLeft />}
-            {!collapsed && 'Comprimi'}
+            {!collapsed && t('Comprimi')}
           </Button>
         </div>
       )}
@@ -188,7 +198,7 @@ export function Layout() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur md:px-6">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label="Apri menu">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)} aria-label={t('Apri menu')}>
             <Menu />
           </Button>
           <div className="flex min-w-0 items-center gap-2 text-[13px]">
@@ -196,18 +206,31 @@ export function Layout() {
             <span className="truncate font-medium">{sys?.hostname ?? 'GIGI OS'}</span>
             {sys && (
               <span className="hidden truncate text-muted sm:inline">
-                · {sys.os} · <Activity className="inline size-3.5 align-[-2px]" /> {Math.round(sys.cpu.usage)}% CPU
+                · {sys.os} · <Activity className="inline size-3.5 align-[-2px]" /> {t('{n}% CPU', { n: Math.round(sys.cpu.usage) })}
               </span>
             )}
-            {problems > 0 && <Badge tone="warn">{problems} da verificare</Badge>}
+            {problems > 0 && <Badge tone="warn">{t('{n} da verificare', { n: problems })}</Badge>}
           </div>
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={openPalette} aria-label="Cerca (Ctrl+K)" className="gap-2 text-muted">
+            <Button variant="ghost" size="sm" onClick={openPalette} aria-label={t('Cerca (Ctrl+K)')} className="gap-2 text-muted">
               <Search />
-              <span className="hidden lg:inline">Cerca</span>
-              <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-sans text-[10px] lg:inline">Ctrl K</kbd>
+              <span className="hidden lg:inline">{t('Cerca')}</span>
+              <kbd className="hidden rounded border border-line px-1.5 py-0.5 font-sans text-[10px] lg:inline">{t('Ctrl K')}</kbd>
             </Button>
-            <Button variant="ghost" size="icon" onClick={toggle} aria-label={theme === 'dark' ? 'Passa al tema chiaro' : 'Passa al tema scuro'}>
+            {/* Nascosto sul telefono (la lingua si cambia dal menu): Button imposta già inline-flex */}
+            <div className="hidden sm:block">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-2 font-mono text-[11px] text-muted"
+                onClick={() => setLang(lang === 'it' ? 'en' : 'it')}
+                aria-label={lang === 'it' ? 'Switch to English' : 'Passa all’italiano'}
+                title={lang === 'it' ? 'Switch to English' : 'Passa all’italiano'}
+              >
+                <Languages /> {lang.toUpperCase()}
+              </Button>
+            </div>
+            <Button variant="ghost" size="icon" onClick={toggle} aria-label={theme === 'dark' ? t('Passa al tema chiaro') : t('Passa al tema scuro')}>
               {theme === 'dark' ? <Sun /> : <Moon />}
             </Button>
             <div className="mx-1 hidden h-5 w-px bg-line sm:block" />
@@ -215,7 +238,7 @@ export function Layout() {
               <div className="text-[13px] font-medium">{user?.username}</div>
               <div className="text-[11px] text-muted">{user ? ROLE_LABEL[user.role] : ''}</div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => void logout()} aria-label="Esci">
+            <Button variant="ghost" size="icon" onClick={() => void logout()} aria-label={t('Esci')}>
               <LogOut />
             </Button>
           </div>

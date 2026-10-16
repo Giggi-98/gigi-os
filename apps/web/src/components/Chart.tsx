@@ -1,4 +1,5 @@
 // Grafici SVG leggeri (nessuna libreria): area/linea con griglia, asse temporale e tooltip.
+import { locale, t } from '../lib/i18n';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export type Series = { key: string; label: string; color: string; values: (number | null)[]; format?: (v: number) => string };
@@ -70,8 +71,8 @@ export function AreaChart({
   const long = n > 1 && times[n - 1] - times[0] > 20 * 3600_000;
   const fmtT = (t: number) =>
     long
-      ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-      : new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      ? new Date(t).toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : new Date(t).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
   const onMove = (e: React.PointerEvent) => {
     const r = ref.current?.getBoundingClientRect();
@@ -81,7 +82,7 @@ export function AreaChart({
     setHover(Math.max(0, Math.min(n - 1, i)));
   };
 
-  if (n < 2) return <div className="flex items-center justify-center text-xs text-muted" style={{ height }}>Raccolta dati in corso…</div>;
+  if (n < 2) return <div className="flex items-center justify-center text-xs text-muted" style={{ height }}>{t('Raccolta dati in corso…')}</div>;
 
   return (
     <div className="relative" ref={setBox}>
