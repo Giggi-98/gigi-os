@@ -14,6 +14,7 @@ import type { Integrations } from './integrations.js';
 import type { MediaBridge } from './media.js';
 import type { Automations } from './automations.js';
 import type { Backups } from './backup.js';
+import type { Network } from './network.js';
 import { registerRoutes } from './routes.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
@@ -37,6 +38,7 @@ export type Deps = {
   filesSocket?: string;
   automations?: Automations;
   backups?: Backups;
+  network?: Network;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

@@ -36,11 +36,16 @@ COPY --from=build /src/apps/files/package.json apps/files/package.json
 COPY --from=build /src/apps/files/dist apps/files/dist
 COPY --from=build /src/apps/web/dist apps/web/dist
 COPY package.json ./
+# ping e tracepath per la diagnostica di rete di gigi-api (ICMP non privilegiato, nessuna capability)
+RUN apk add --no-cache iputils-ping iputils-tracepath
 # /run/gigi ospita i socket agent/media ↔ api: il volume nominato eredita questi permessi al primo avvio.
 RUN mkdir -p /run/gigi /data && chown node:node /run/gigi /data && chmod 750 /run/gigi
 USER node
 LABEL org.opencontainers.image.title="GIGI OS" org.opencontainers.image.version="0.2.0"
 CMD ["node", "apps/api/dist/index.js"]
+
+# Binario ufficiale di Docker Compose (Apache-2.0) per gli stack creati dal wizard (D-025).
+FROM docker/compose-bin:v5.6.0 AS compose
 
 # Agent: Debian trixie per avere journalctl compatibile con il journal dell'host (systemd ≥ 257).
 # Dipendenze di produzione installate qui (glibc), non riusate dallo stage Alpine.
@@ -56,6 +61,7 @@ COPY apps/files/package.json apps/files/
 COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev --no-audit --no-fund -w apps/agent --include-workspace-root=false && npm cache clean --force
 COPY --from=build /src/apps/agent/dist apps/agent/dist
+COPY --from=compose /docker-compose /usr/local/bin/docker-compose
 RUN mkdir -p /run/gigi && chown node:node /run/gigi && chmod 750 /run/gigi
 USER node
 CMD ["node", "apps/agent/dist/index.js"]

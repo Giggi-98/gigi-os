@@ -16,8 +16,10 @@ import {
   logStream,
   startStatsLoop,
 } from './docker.js';
+import { diskUsage, pruneBuildCache, removeContainer, removeImage, removeNetwork, removeVolume } from './cleanup.js';
+import { browse, deploy, getJob, getStack, listStacks, preflight, ROOTS, stackAction, type StackAction } from './stacks.js';
 import { getHistory, getSnapshot, startSampler } from './system.js';
-import { listServices, serviceDetail, serviceJournal, systemErrors } from './systemd.js';
+import { firewallBlocked, listServices, serviceDetail, serviceJournal, systemErrors } from './systemd.js';
 
 const SOCKET = process.env.GIGI_AGENT_SOCKET ?? '/run/gigi/agent.sock';
 const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.@:-]{0,199}$/;
@@ -29,6 +31,21 @@ function send(res: http.ServerResponse, status: number, body: unknown) {
   const data = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) });
   res.end(data);
+}
+
+async function readJson<T>(req: http.IncomingMessage, limit = 512 * 1024): Promise<T> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > limit) throw Object.assign(new Error('Richiesta troppo grande'), { status: 413 });
+    chunks.push(c as Buffer);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as T;
+  } catch {
+    throw Object.assign(new Error('JSON non valido'), { status: 400 });
+  }
 }
 
 type Handler = (req: http.IncomingMessage, res: http.ServerResponse, params: string[], q: URLSearchParams) => Promise<void>;
@@ -44,6 +61,7 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/v1\/systemd\/services\/([^/]+)$/, async (_q, res, p) => send(res, 200, await serviceDetail(p[0]))],
   ['GET', /^\/v1\/systemd\/services\/([^/]+)\/journal$/, async (_q, res, p, q) => send(res, 200, await serviceJournal(p[0], Number(q.get('lines') ?? 200) || 200))],
   ['GET', /^\/v1\/journal\/errors$/, async (_q, res, _p, q) => send(res, 200, await systemErrors(Number(q.get('hours') ?? 24) || 24))],
+  ['GET', /^\/v1\/firewall\/blocked$/, async (_q, res, _p, q) => send(res, 200, await firewallBlocked(Number(q.get('hours') ?? 24) || 24))],
   ['GET', /^\/v1\/docker\/info$/, async (_q, res) => send(res, 200, await engineInfo())],
   ['GET', /^\/v1\/containers$/, async (_q, res) => send(res, 200, await listContainers())],
   ['GET', /^\/v1\/containers\/([^/]+)$/, async (_q, res, p) => send(res, 200, await inspectContainer(p[0]))],
@@ -70,6 +88,29 @@ const routes: [string, RegExp, Handler][] = [
     },
   ],
   ['GET', /^\/v1\/images$/, async (_q, res) => send(res, 200, await listImages())],
+  // Operazioni distruttive (D-024): una risorsa per chiamata, mai force
+  ['GET', /^\/v1\/docker\/df$/, async (_q, res) => send(res, 200, await diskUsage())],
+  ['DELETE', /^\/v1\/images\/([^/]+)$/, async (_q, res, p) => send(res, 200, await removeImage(p[0]))],
+  ['DELETE', /^\/v1\/volumes\/([^/]+)$/, async (_q, res, p) => send(res, 200, await removeVolume(p[0]))],
+  ['DELETE', /^\/v1\/networks\/([^/]+)$/, async (_q, res, p) => send(res, 200, await removeNetwork(p[0]))],
+  ['DELETE', /^\/v1\/containers\/([^/]+)$/, async (_q, res, p) => send(res, 200, await removeContainer(p[0]))],
+  ['POST', /^\/v1\/docker\/build-cache\/prune$/, async (_q, res) => send(res, 200, await pruneBuildCache())],
+  // Stack compose (D-025)
+  ['GET', /^\/v1\/stacks$/, async (_q, res) => send(res, 200, await listStacks())],
+  ['GET', /^\/v1\/stacks\/roots$/, async (_q, res) => send(res, 200, ROOTS)],
+  ['GET', /^\/v1\/stacks\/browse$/, async (_q, res, _p, q) => send(res, 200, await browse(q.get('root') ?? '', q.get('path') ?? ''))],
+  ['GET', /^\/v1\/stacks\/jobs\/([^/]+)$/, async (_q, res, p) => send(res, 200, getJob(p[0]))],
+  ['POST', /^\/v1\/stacks\/preflight$/, async (req, res) => send(res, 200, await preflight(await readJson(req)))],
+  ['POST', /^\/v1\/stacks\/deploy$/, async (req, res) => send(res, 200, await deploy(await readJson(req)))],
+  ['GET', /^\/v1\/stacks\/([^/]+)$/, async (_q, res, p) => send(res, 200, await getStack(p[0]))],
+  [
+    'POST',
+    /^\/v1\/stacks\/([^/]+)\/(up|stop|restart|pull|down|remove|rollback)$/,
+    async (req, res, p) => {
+      const body = await readJson<{ removeVolumes?: boolean }>(req);
+      send(res, 200, await stackAction(p[0], p[1] as StackAction, { removeVolumes: body.removeVolumes === true }));
+    },
+  ],
   ['GET', /^\/v1\/volumes$/, async (_q, res) => send(res, 200, await listVolumes())],
   ['GET', /^\/v1\/networks$/, async (_q, res) => send(res, 200, await listNetworks())],
   [
@@ -108,10 +149,13 @@ const server = http.createServer(async (req, res) => {
     try {
       await handler(req, res, params, url.searchParams);
     } catch (e) {
-      const err = e as { statusCode?: number; status?: number; message?: string };
-      const status = err.status ?? (err.statusCode === 404 ? 404 : err.statusCode === 304 ? 409 : 500);
+      const err = e as { statusCode?: number; status?: number; message?: string; findings?: unknown; json?: { message?: string } };
+      const status = err.status ?? (err.statusCode === 404 ? 404 : err.statusCode === 304 || err.statusCode === 409 ? 409 : 500);
+      if (err.statusCode === 409 && err.json?.message) err.message = `Docker: ${err.json.message}`;
       log('error', 'request failed', { path: url.pathname, status, err: err.message });
-      if (!res.headersSent) send(res, status, { error: status === 404 ? 'non trovato' : err.message ?? 'errore' });
+      // 404 di Docker → messaggio generico; i 404 "nostri" (status esplicito) mantengono il testo
+      if (!res.headersSent)
+        send(res, status, { error: status === 404 && !err.status ? 'non trovato' : err.message ?? 'errore', ...(err.findings ? { findings: err.findings } : {}) });
       else res.end();
     }
     return;

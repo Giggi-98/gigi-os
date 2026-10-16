@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, ArrowUpDown, Lock, Pause, Play, Power, RotateCw, Search, Square, WrapText, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownToLine, ArrowUpDown, Lock, Pause, Play, Power, RotateCw, Search, Square, Trash2, WrapText, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Badge,
@@ -25,8 +25,10 @@ import { api, type Container, type ContainerDetail } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ago, bytes, dateTime, pct } from '../lib/format';
 import { useContainers } from '../lib/queries';
+import { DeleteDialog, imageItem, isOwn, LocalBadge, removableNetwork, SpaceTab, useImages, useNetworks, useVolumes, type CleanupItem, type CleanupKind } from './DockerCleanup';
+import { StacksTab } from './DockerStacks';
 
-type Tab = 'containers' | 'images' | 'volumes' | 'networks';
+type Tab = 'containers' | 'stacks' | 'images' | 'volumes' | 'networks' | 'space';
 
 export function DockerPage() {
   const [tab, setTab] = useState<Tab>('containers');
@@ -43,16 +45,20 @@ export function DockerPage() {
         onChange={setTab}
         items={[
           { id: 'containers', label: 'Container', count: containers.data?.length },
+          { id: 'stacks', label: 'Stack' },
           { id: 'images', label: 'Immagini' },
           { id: 'volumes', label: 'Volumi' },
           { id: 'networks', label: 'Reti' },
+          { id: 'space', label: 'Spazio e pulizia' },
         ]}
       />
       <div className="mt-4">
         {tab === 'containers' && <ContainersTab q={containers} />}
+        {tab === 'stacks' && <StacksTab />}
         {tab === 'images' && <ImagesTab />}
         {tab === 'volumes' && <VolumesTab />}
         {tab === 'networks' && <NetworksTab />}
+        {tab === 'space' && <SpaceTab />}
       </div>
     </div>
   );
@@ -190,6 +196,7 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
   const { isAdmin } = useAuth();
   const [tab, setTab] = useState<DTab>('overview');
   const [action, setAction] = useState<'start' | 'stop' | 'restart' | null>(null);
+  const [remove, setRemove] = useState(false);
   const d = useQuery({ queryKey: ['container', name], queryFn: () => api<ContainerDetail>(`/docker/containers/${encodeURIComponent(name)}`), refetchInterval: 10_000 });
 
   useEffect(() => {
@@ -226,9 +233,14 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
                       </Button>
                     </>
                   ) : (
-                    <Button size="sm" variant="primary" onClick={() => setAction('start')}>
-                      <Power /> Avvia
-                    </Button>
+                    <>
+                      <Button size="sm" variant="primary" onClick={() => setAction('start')}>
+                        <Power /> Avvia
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => setRemove(true)}>
+                        <Trash2 /> Rimuovi
+                      </Button>
+                    </>
                   )}
                 </>
               ) : (
@@ -263,6 +275,14 @@ function ContainerDrawer({ name, onClose }: { name: string; onClose: () => void 
         </div>
       </div>
       {action && c && <ActionDialog name={name} action={action} onClose={() => setAction(null)} />}
+      {remove && c && (
+        <DeleteDialog
+          kind="container"
+          items={[{ id: c.name, label: c.name, detail: c.image }]}
+          onClose={() => setRemove(false)}
+          onDone={onClose}
+        />
+      )}
     </div>
   );
 }
@@ -556,18 +576,63 @@ function ActionDialog({ name, action, onClose }: { name: string; action: 'start'
   );
 }
 
+/** Selezione multipla per le tabelle con eliminazione (solo admin). */
+function useSelection() {
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  return { sel, toggle, clear: () => setSel(new Set()), setAll: (ids: string[]) => setSel(new Set(ids)) };
+}
+
+function SelectionBar({ count, onDelete, onClear, children }: { count: number; onDelete: () => void; onClear: () => void; children?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {children}
+      {count > 0 && (
+        <>
+          <span className="text-xs text-fg-2">{count} selezionat{count === 1 ? 'a' : 'e'}</span>
+          <Button size="sm" variant="ghost" onClick={onClear}>Deseleziona</Button>
+          <Button size="sm" variant="danger" onClick={onDelete}>
+            <Trash2 /> Elimina
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RowCheck({ checked, disabled, onChange, label, title }: { checked: boolean; disabled?: boolean; onChange: () => void; label: string; title?: string }) {
+  return (
+    <input type="checkbox" className="size-4 accent-[var(--err)] disabled:opacity-30" checked={checked} disabled={disabled} onChange={onChange} aria-label={label} title={title} />
+  );
+}
+
 function ImagesTab() {
-  const q = useQuery({ queryKey: ['images'], queryFn: () => api<{ id: string; tags: string[]; size: number; created: number; containers: string[]; dangling: boolean }[]>('/docker/images') });
+  const { isAdmin } = useAuth();
+  const q = useImages();
+  const s = useSelection();
+  const [dialog, setDialog] = useState<CleanupItem[] | null>(null);
   if (q.isError) return <ErrorBox error={q.error} />;
   if (!q.data) return <Skeleton className="h-60 w-full" />;
   const total = q.data.reduce((a, i) => a + i.size, 0);
   const unused = q.data.filter((i) => i.containers.length === 0);
   return (
-    <Card bodyClassName="!p-0" title={`${q.data.length} immagini · ${bytes(total)}`} subtitle={`${unused.length} non usate da alcun container (${bytes(unused.reduce((a, i) => a + i.size, 0))}). GIGI OS non le elimina automaticamente.`}>
+    <Card
+      bodyClassName="!p-0"
+      title={`${q.data.length} immagini · ${bytes(total)}`}
+      subtitle={`${unused.length} non usate da alcun container (${bytes(unused.reduce((a, i) => a + i.size, 0))}). Le immagini in uso non si possono selezionare.`}
+      actions={isAdmin && <SelectionBar count={s.sel.size} onClear={s.clear} onDelete={() => setDialog(q.data.filter((i) => s.sel.has(i.id)).map(imageItem))} />}
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-[13px]">
           <thead className="border-y border-line text-xs text-muted">
             <tr>
+              {isAdmin && <th className="w-8 py-2 pl-4"><span className="sr-only">Seleziona</span></th>}
               <th className="px-4 py-2 font-medium">Immagine</th>
               <th className="px-3 py-2 font-medium">Usata da</th>
               <th className="px-3 py-2 text-right font-medium">Dimensione</th>
@@ -576,8 +641,16 @@ function ImagesTab() {
           </thead>
           <tbody>
             {[...q.data].sort((a, b) => b.size - a.size).map((i) => (
-              <tr key={i.id} className="border-b border-line/60 last:border-0">
-                <td className="px-4 py-2 font-mono text-xs">{i.tags.join(', ') || <span className="text-muted">{i.id.slice(7, 19)} (dangling)</span>}</td>
+              <tr key={i.id} className={cx('border-b border-line/60 last:border-0', s.sel.has(i.id) && 'bg-err-soft')}>
+                {isAdmin && (
+                  <td className="py-2 pl-4">
+                    <RowCheck checked={s.sel.has(i.id)} disabled={i.containers.length > 0} onChange={() => s.toggle(i.id)} label={`Seleziona ${i.tags[0] ?? i.id.slice(7, 19)}`} title={i.containers.length ? 'In uso' : undefined} />
+                  </td>
+                )}
+                <td className="px-4 py-2 font-mono text-xs">
+                  {i.tags.join(', ') || <span className="text-muted">{i.id.slice(7, 19)} (dangling)</span>}
+                  {i.local && !i.dangling && <span className="ml-2 align-middle"><LocalBadge /></span>}
+                </td>
                 <td className="px-3 py-2">{i.containers.length ? i.containers.join(', ') : <Badge>inutilizzata</Badge>}</td>
                 <td className="px-3 py-2 text-right tabular">{bytes(i.size)}</td>
                 <td className="px-4 py-2 text-right text-xs text-muted">{ago(i.created)}</td>
@@ -586,21 +659,32 @@ function ImagesTab() {
           </tbody>
         </table>
       </div>
+      {dialog && <DeleteDialog kind="image" items={dialog} onClose={() => { setDialog(null); s.clear(); }} />}
     </Card>
   );
 }
 
 function VolumesTab() {
-  const q = useQuery({ queryKey: ['volumes'], queryFn: () => api<{ name: string; driver: string; mountpoint: string; project: string | null; containers: string[] }[]>('/docker/volumes') });
+  const { isAdmin } = useAuth();
+  const q = useVolumes();
+  const s = useSelection();
+  const [dialog, setDialog] = useState<CleanupItem[] | null>(null);
   if (q.isError) return <ErrorBox error={q.error} />;
   if (!q.data) return <Skeleton className="h-40 w-full" />;
   if (q.data.length === 0) return <Empty title="Nessun volume Docker" />;
+  const removable = (v: { name: string; containers: string[] }) => v.containers.length === 0 && !isOwn(v.name);
   return (
-    <Card bodyClassName="!p-0">
+    <Card
+      bodyClassName="!p-0"
+      title={`${q.data.length} volumi`}
+      subtitle="Un volume si può eliminare solo se nessun container (nemmeno fermo) lo usa."
+      actions={isAdmin && <SelectionBar count={s.sel.size} onClear={s.clear} onDelete={() => setDialog(q.data.filter((v) => s.sel.has(v.name)).map((v) => ({ id: v.name, label: v.name, detail: v.project ?? undefined })))} />}
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-[13px]">
-          <thead className="border-b border-line text-xs text-muted">
+          <thead className="border-y border-line text-xs text-muted">
             <tr>
+              {isAdmin && <th className="w-8 py-2 pl-4"><span className="sr-only">Seleziona</span></th>}
               <th className="px-4 py-2 font-medium">Volume</th>
               <th className="px-3 py-2 font-medium">Stack</th>
               <th className="px-4 py-2 font-medium">Usato da</th>
@@ -608,7 +692,12 @@ function VolumesTab() {
           </thead>
           <tbody>
             {q.data.map((v) => (
-              <tr key={v.name} className="border-b border-line/60 last:border-0">
+              <tr key={v.name} className={cx('border-b border-line/60 last:border-0', s.sel.has(v.name) && 'bg-err-soft')}>
+                {isAdmin && (
+                  <td className="py-2 pl-4">
+                    <RowCheck checked={s.sel.has(v.name)} disabled={!removable(v)} onChange={() => s.toggle(v.name)} label={`Seleziona ${v.name}`} title={isOwn(v.name) ? 'Volume di GIGI OS' : v.containers.length ? 'In uso' : undefined} />
+                  </td>
+                )}
                 <td className="px-4 py-2">
                   <div className="font-mono text-xs">{v.name}</div>
                   <div className="truncate font-mono text-[11px] text-muted">{v.mountpoint}</div>
@@ -620,18 +709,33 @@ function VolumesTab() {
           </tbody>
         </table>
       </div>
+      {dialog && <DeleteDialog kind="volume" items={dialog} onClose={() => { setDialog(null); s.clear(); }} />}
     </Card>
   );
 }
 
 function NetworksTab() {
-  const q = useQuery({ queryKey: ['networks'], queryFn: () => api<{ id: string; name: string; driver: string; subnet: string | null; containers: string[] }[]>('/docker/networks') });
+  const { isAdmin } = useAuth();
+  const q = useNetworks();
+  const [dialog, setDialog] = useState<{ kind: CleanupKind; items: CleanupItem[] } | null>(null);
   if (q.isError) return <ErrorBox error={q.error} />;
   if (!q.data) return <Skeleton className="h-40 w-full" />;
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {q.data.map((n) => (
-        <Card key={n.id} title={n.name} subtitle={`${n.driver}${n.subnet ? ` · ${n.subnet}` : ''}`}>
+        <Card
+          key={n.id}
+          title={n.name}
+          subtitle={`${n.driver}${n.subnet ? ` · ${n.subnet}` : ''}`}
+          actions={
+            isAdmin &&
+            removableNetwork(n) && (
+              <Button size="icon" variant="ghost" aria-label={`Elimina la rete ${n.name}`} onClick={() => setDialog({ kind: 'network', items: [{ id: n.id, label: n.name, detail: n.driver }] })}>
+                <Trash2 />
+              </Button>
+            )
+          }
+        >
           {n.containers.length ? (
             <div className="flex flex-wrap gap-1">
               {n.containers.map((c) => (
@@ -643,6 +747,7 @@ function NetworksTab() {
           )}
         </Card>
       ))}
+      {dialog && <DeleteDialog {...dialog} onClose={() => setDialog(null)} />}
     </div>
   );
 }

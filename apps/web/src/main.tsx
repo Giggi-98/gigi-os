@@ -12,6 +12,7 @@ import { ArmonyPage } from './pages/Armony';
 import { AutomationsPage } from './pages/Automations';
 import { BackupPage } from './pages/Backup';
 import { Dashboard } from './pages/Dashboard';
+import { NetworkPage } from './pages/Network';
 import { DockerPage } from './pages/Docker';
 import { DownloadsPage } from './pages/Downloads';
 import { FilesPage } from './pages/Files';
@@ -47,6 +48,7 @@ function App() {
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="sistema" element={<SystemPage />} />
+        <Route path="rete" element={<NetworkPage />} />
         <Route path="docker" element={<DockerPage />} />
         <Route path="media" element={<MediaPage />} />
         <Route path="media-automation" element={<MediaAutomationPage />} />

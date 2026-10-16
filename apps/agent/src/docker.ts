@@ -249,6 +249,8 @@ export async function listImages() {
       created: i.Created * 1000,
       containers: users,
       dangling: !i.RepoTags || i.RepoTags.every((t) => t === '<none>:<none>'),
+      // Senza digest di registry: costruita sul mini PC, una volta eliminata non si può riscaricare
+      local: !i.RepoDigests?.length,
     };
   });
 }

@@ -10,6 +10,7 @@ import {
   Menu,
   Moon,
   Music2,
+  Network,
   PlugZap,
   Server,
   ShieldCheck,
@@ -34,6 +35,7 @@ const NAV: { group: string; items: Item[] }[] = [
     group: 'Infrastruttura',
     items: [
       { to: '/sistema', label: 'Sistema', icon: <Server /> },
+      { to: '/rete', label: 'Rete', icon: <Network /> },
       { to: '/docker', label: 'Docker', icon: <Boxes /> },
       { to: '/file', label: 'File', icon: <FolderTree /> },
     ],

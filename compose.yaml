@@ -24,10 +24,14 @@ services:
     # Rete host SOLO per leggere i contatori delle interfacce dell'host: l'agent non apre alcuna porta.
     network_mode: host
     group_add: ["${DOCKER_GID:-128}", "${JOURNAL_GID:-999}"]
-    mem_limit: 160m
+    # 384m: durante pull/up dei nuovi stack gira anche docker-compose (~60 MB)
+    mem_limit: 384m
     cpus: 0.5
     environment:
       GIGI_AGENT_SOCKET: /run/gigi/agent.sock
+      # Radici dove il wizard può creare stack (D-025); montate qui sotto con lo STESSO percorso
+      GIGI_STACK_ROOTS: Stack=/opt/stacks
+      GIGI_COMPOSE_BIN: /usr/local/bin/docker-compose
       GIGI_OS_RELEASE: /host/os-release
       GIGI_HOSTNAME_FILE: /host/hostname
       # statfs su un file del filesystem root restituisce lo spazio di "/" senza montare directory dell'host
@@ -46,6 +50,8 @@ services:
       - /usr/lib/systemd/system:/host/units/lib:ro
       - /var/log/journal:/var/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
+      # Stack creati dal wizard: stesso percorso dell'host, così ./data nel compose diventa /opt/stacks/<nome>/data
+      - /opt/stacks:/opt/stacks
 
   api:
     <<: *hardening
@@ -79,6 +85,8 @@ services:
       - ./backups:/backups
       - ./.env:/backup-src/.env:ro
       - ./compose.yaml:/backup-src/compose.yaml:ro
+      # DNS reali dell'host (systemd-resolved) per la pagina Rete, in sola lettura
+      - /run/systemd/resolve:/host/resolve:ro
       # Configurazioni di altri servizi per il backup, in sola lettura e limitate alle sottocartelle necessarie
       - /opt/docker/qbittorrent/config/qBittorrent:/backup-src/qbittorrent:ro
       - /opt/docker/jellyfin/config/config:/backup-src/jellyfin/config:ro

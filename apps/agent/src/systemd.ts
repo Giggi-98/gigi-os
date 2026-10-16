@@ -209,3 +209,45 @@ export async function systemErrors(hours: number) {
   const out = await journalctl(['-p', '0..3', `--since=-${h}h`, '-n', '300', '-o', 'json', '--output-fields=MESSAGE,PRIORITY,_PID,SYSLOG_IDENTIFIER,_COMM,_SYSTEMD_UNIT,UNIT']);
   return toLines(out).reverse();
 }
+
+/**
+ * Pacchetti bloccati da UFW (righe "[UFW BLOCK]" del kernel nel journal), aggregati.
+ * Sola lettura: le regole del firewall non sono leggibili senza root, i blocchi sì.
+ */
+export async function firewallBlocked(hours: number) {
+  const h = Math.min(Math.max(Math.round(hours), 1), 168);
+  const out = await journalctl(['-k', `--since=-${h}h`, '--grep', 'UFW BLOCK', '-r', '-n', '20000', '-q', '-o', 'json', '--output-fields=MESSAGE'], 64 * 1024 * 1024);
+  const field = (msg: string, k: string) => new RegExp(`(?:^|\\s)${k}=(\\S*)`).exec(msg)?.[1] ?? '';
+  const bySource = new Map<string, { src: string; count: number; ports: Set<string>; last: number; iface: string }>();
+  const byPort = new Map<string, { port: string; count: number; sources: Set<string> }>();
+  const recent: { t: number; src: string; dst: string; proto: string; dport: string; iface: string }[] = [];
+  let total = 0;
+  for (const e of parseJson(out)) {
+    const msg = e.MESSAGE ?? '';
+    const t = Math.round(Number(e.__REALTIME_TIMESTAMP) / 1000);
+    const src = field(msg, 'SRC');
+    const proto = field(msg, 'PROTO');
+    const dport = field(msg, 'DPT');
+    const iface = field(msg, 'IN');
+    if (!src) continue;
+    total++;
+    const port = dport ? `${dport}/${proto.toLowerCase()}` : proto.toLowerCase();
+    const s = bySource.get(src) ?? { src, count: 0, ports: new Set(), last: t, iface };
+    s.count++;
+    s.ports.add(port);
+    bySource.set(src, s);
+    const p = byPort.get(port) ?? { port, count: 0, sources: new Set() };
+    p.count++;
+    p.sources.add(src);
+    byPort.set(port, p);
+    if (recent.length < 100) recent.push({ t, src, dst: field(msg, 'DST'), proto, dport, iface });
+  }
+  return {
+    hours: h,
+    total,
+    truncated: total >= 20000,
+    sources: [...bySource.values()].sort((a, b) => b.count - a.count).slice(0, 30).map((s) => ({ ...s, ports: [...s.ports].slice(0, 10) })),
+    ports: [...byPort.values()].sort((a, b) => b.count - a.count).slice(0, 30).map((p) => ({ port: p.port, count: p.count, sources: p.sources.size })),
+    recent,
+  };
+}

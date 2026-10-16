@@ -9,6 +9,8 @@ import { integrationInput } from './integrations.js';
 import { registerFiles } from './files.js';
 import { registerAutomations } from './automations.js';
 import { registerBackups } from './backup.js';
+import { registerStacks } from './stacks.js';
+import { registerNetwork } from './network.js';
 import { COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
 
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
@@ -525,6 +527,8 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   if (d.filesSocket) registerFiles(app, d.filesSocket, audit, admin);
   if (d.automations) registerAutomations(app, d.automations, events, audit, viewer, admin);
   if (d.backups) registerBackups(app, d.backups, audit, admin);
+  registerStacks(app, agent, audit, events, viewer, admin);
+  if (d.network) registerNetwork(app, d.network, audit, viewer, admin);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }
