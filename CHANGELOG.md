@@ -5,7 +5,8 @@ Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEG
 
 ## [Non rilasciato]
 
-- GitHub: la release pubblica le immagini con il proprietario in minuscolo (GHCR lo richiede) e si può riavviare a mano per un tag già pubblicato; la CI usa Trivy fissato a un commit.
+- GitHub: la release pubblica le immagini con il proprietario in minuscolo (GHCR lo richiede) e si può riavviare a mano per un tag già pubblicato; la CI usa Trivy fissato a un commit e riporta ogni vulnerabilità come annotazione.
+- Immagini più sicure e leggere: aggiornamenti di sicurezza di Debian/Alpine applicati in build (es. `liblzma5`), npm, npx, corepack e yarn tolti dalle immagini finali.
 
 ## [0.3.1] — 2026-10-17
 

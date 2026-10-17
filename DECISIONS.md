@@ -346,3 +346,10 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Scelta.** Release con un job `meta` che ricava tag, versione e proprietario in minuscolo e controlla che il tag coincida con `package.json`; avvio manuale (`workflow_dispatch`) con il tag da pubblicare, che usa il codice del tag con il workflow corrente: così si pubblica la 0.3.1 senza rifare il tag. Trivy fissato al commit della v0.36.0 (`ed142fd…`), non al tag, perché un’azione di terze parti con accesso al repository può essere sostituita spostando il tag.
 **Conseguenze.** Gli aggiornamenti con `update.sh` non dipendono dalla release: usano il tag git e costruiscono in locale. Le immagini su GHCR alla prima pubblicazione sono private: per farle scaricare senza login vanno rese pubbliche dalle impostazioni del pacchetto.
 **Da rivedere se** Dependabot propone una nuova versione di Trivy (va controllata e rifissata a mano) o se le azioni Node 20 smettono di funzionare (avviso di GitHub: passare alle versioni successive di checkout, setup-node e docker/*).
+
+## D-043 — Immagini con aggiornamenti di sicurezza e senza gestori di pacchetti (2026-10-17)
+
+**Contesto.** Con D-042 la CI arriva a Trivy, che segnala vulnerabilità gravi nell’immagine agent. I log di GitHub richiedono il login; verificato in locale: `liblzma5` di Debian 13 ha un aggiornamento di sicurezza (5.8.1-1+deb13u2) non ancora incluso in `node:22-trixie-slim`.
+**Scelta.** In build: `apt-get upgrade` (agent) e `apk upgrade` (runtime, media). npm, npx, corepack e yarn delle immagini Node si tolgono dalle immagini finali (servono solo a installare le dipendenze, negli stage di build). La CI scrive ogni vulnerabilità come annotazione del job, leggibile senza login, e non si ferma alla prima immagine (`fail-fast: false`).
+**Conseguenze.** La build dipende dagli archivi Debian/Alpine del momento: due build a distanza di giorni possono differire nei pacchetti di sistema. Dentro i container non c’è più npm (nessun impatto: si avviano con `node`).
+**Da rivedere se** serve una build riproducibile al bit (immagini di base fissate per digest e aggiornate da Dependabot).

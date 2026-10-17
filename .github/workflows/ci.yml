@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     strategy:
+      # Ogni immagine va scansionata anche se un'altra fallisce
+      fail-fast: false
       matrix:
         target: [runtime, agent, media]
     steps:
@@ -47,4 +49,16 @@ jobs:
           image-ref: gigi-os-ci-${{ matrix.target }}:test
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: '1'
+          format: json
+          output: trivy.json
+          exit-code: '0'
+      # Ogni vulnerabilità diventa un'annotazione (pubblica, leggibile senza accedere ai log); fallisce se ce n'è almeno una
+      - name: Esito della scansione
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("trivy.json", "utf8"));
+            const v = (r.Results ?? []).flatMap((t) => (t.Vulnerabilities ?? []).map((x) => ({ ...x, target: t.Target })));
+            for (const x of v.slice(0, 40)) console.log(`::error title=${x.Severity} ${x.VulnerabilityID}::${x.PkgName} ${x.InstalledVersion} → ${x.FixedVersion} (${x.target})`);
+            console.log(`${v.length} vulnerabilità critiche o alte con correzione disponibile`);
+            process.exit(v.length ? 1 : 0);
+          '
