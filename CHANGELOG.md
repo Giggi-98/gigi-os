@@ -3,7 +3,9 @@
 Ogni versione ha un tag `vX.Y.Z`. Il workflow di release copia nella pagina della release la sezione con lo stesso numero.
 Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEGGIMI.md).
 
-## [Non rilasciato]
+## [0.3.1] — 2026-10-17
+
+Aggiornamento da 0.3.0: `sudo ./update.sh` (applica da solo la migrazione 008 del database; copia dei dati in `backups/update-0.3.0-to-0.3.1-…`).
 
 - **Flussi** in Automazioni: editor grafico stile n8n con blocchi di ricezione (webhook con token, API JSON, GitHub, RSS, pianificazione, eventi di GIGI OS, comandi Telegram), logica (filtri, strade, attese fino a una data, doppioni, conferme con pulsanti su Telegram) e azioni (notifiche, HTTP, ricerca e download torrent, Jellyfin, container). Storico di ogni esecuzione blocco per blocco. Modelli pronti: «Borollo: film confermato», «/film da Telegram», «Avvisami quando un titolo è pronto».
 - **Controllo libreria** in Media: titoli rimasti in Jellyfin e Apollo senza più un torrent (con «Elimina») e schede di Jellyfin senza file (con «Togli da Jellyfin»).
