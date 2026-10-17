@@ -1,7 +1,7 @@
 // D-038: «Elimina dalla libreria» ed «Elimina ovunque» con Jellyfin e qBittorrent simulati e file manager vero.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, linkSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, linkSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Files, parseRoots } from '../apps/files/dist/fsops.js';
@@ -31,6 +31,7 @@ function movie(name, hash, { linked = true } = {}) {
 }
 
 function setup({ titles = [], torrents = [], jellyfinSlow = false, sticky = false } = {}) {
+  const calls0 = { forced: [] };
   const calls = { notified: [], refresh: 0, qbDelete: [], removed: [], events: [] };
   const files = new Files(parseRoots(`Download=${dl},Media=${media}`));
   const filesClient = {
@@ -59,7 +60,14 @@ function setup({ titles = [], torrents = [], jellyfinSlow = false, sticky = fals
     }
     if (u.pathname === '/Library/Refresh') {
       calls.refresh++;
-      for (const t of titles) if (!existsSync(t.lib)) forgotten.add(t.jfId);
+      // Come Jellyfin: una cartella di libreria vuota viene saltata («inaccessible or empty, skipping»)
+      if (readdirSync(film).length) for (const t of titles) if (!existsSync(t.lib)) forgotten.add(t.jfId);
+      return res('', 204);
+    }
+    if (init.method === 'DELETE' && u.pathname.startsWith('/Items/')) {
+      const id = u.pathname.split('/')[2];
+      calls0.forced.push(id);
+      forgotten.add(id);
       return res('', 204);
     }
     if (u.pathname === '/Items' && !u.searchParams.get('Ids')) {
@@ -91,6 +99,7 @@ function setup({ titles = [], torrents = [], jellyfinSlow = false, sticky = fals
       { id: 'qb', type: 'qbittorrent', enabled: true, config: { container: 'qbittorrent' } },
     ],
     contextFor: (id) => ({ row: { base_url: `http://${id}`, auth_type: 'apikey' }, ctx: ctx(id) }),
+    forget: () => { calls.forgetCache = (calls.forgetCache ?? 0) + 1; },
     action: async (_id, name, body) => {
       assert.equal(name, 'delete');
       assert.equal(body.deleteFiles, true);
@@ -114,6 +123,7 @@ function setup({ titles = [], torrents = [], jellyfinSlow = false, sticky = fals
   const events = { add: (...a) => calls.events.push(a) };
   const bridge = new MediaBridge(mediaClient, agent, integrations, events, filesClient);
   bridge.wait = async () => {};
+  Object.assign(calls, calls0);
   return { bridge, calls };
 }
 
@@ -191,4 +201,31 @@ test('controllo libreria: titoli senza torrent e schede di Jellyfin senza file',
   assert.equal(calls.refresh, 1);
   assert.deepEqual((await bridge.libraryCheck()).ghosts, []);
   assert.ok(existsSync(alone.lib) && existsSync(linked.lib), 'il controllo non elimina niente');
+});
+
+test('ultimo film della libreria: la scansione lo salta, GIGI OS lo toglie da Jellyfin dopo aver verificato il disco', async () => {
+  for (const d of readdirSync(film)) rmSync(path.join(film, d), { recursive: true, force: true });
+  const m = movie('Film Nove (2009)', '9'.repeat(40), { linked: false });
+  const titles = [m];
+  const { bridge, calls } = setup({ titles, torrents: [], sticky: true });
+  const plan = await bridge.libraryPlan(m.jfId);
+  const r = await bridge.libraryDelete(m.jfId, { mode: 'delete', torrents: [], expect: plan.videos }, 'admin');
+  assert.equal(r.jellyfin, 'removed');
+  assert.deepEqual(readdirSync(film), [], 'libreria Film rimasta vuota');
+  assert.deepEqual(calls.forced, [m.jfId], 'tolto con DELETE /Items dopo la verifica');
+  assert.ok(calls.forgetCache > 0, 'cache delle liste dimenticata');
+
+  // Un titolo con il file presente non viene mai tolto, anche se lo si chiede
+  const keep = movie('Film Dieci (2010)', 'f'.repeat(40), { linked: false });
+  titles.push(keep);
+  assert.equal(await bridge.afterDelete([], [keep.jfId], 'prova'), 'pending');
+  for (let i = 0; i < 50; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(!calls.forced.includes(keep.jfId));
+
+  // Tolto a mano dal disco: la scansione lo salta (libreria vuota), il controllo lo trova e lo toglie
+  rmSync(keep.dir, { recursive: true });
+  await bridge.libraryRescan();
+  assert.deepEqual((await bridge.libraryCheck()).ghosts.map((g) => g.title), ['Film Dieci (2010)']);
+  assert.equal((await bridge.libraryFixGhosts()).jellyfin, 'removed');
+  assert.deepEqual((await bridge.libraryCheck()).ghosts, []);
 });

@@ -230,3 +230,12 @@ export async function jellyfinCatalog(ctx: ConnectorContext) {
     path: i.Path!,
   }));
 }
+
+/**
+ * Toglie un titolo dal catalogo di Jellyfin. Da usare solo quando GIGI OS ha verificato che i suoi file non esistono
+ * più: la scansione non lo fa se la cartella della libreria è rimasta vuota («inaccessible or empty, skipping»).
+ */
+export async function jellyfinForget(ctx: ConnectorContext, id: string) {
+  if (!/^[0-9a-f]{32}$/i.test(id)) throw new ConnectorError('id non valido', 'error', 400);
+  expectOk(await ctx.http(`/Items/${id}`, { method: 'DELETE', headers: headers(ctx) }), 'Rimozione da Jellyfin');
+}

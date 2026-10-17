@@ -6,7 +6,7 @@ import type { AgentClient } from './agent.js';
 import type { Events } from './events.js';
 import type { Integrations } from './integrations.js';
 import type { Audit, SessionUser } from './security.js';
-import { jellyfinCatalog, jellyfinExisting, jellyfinLocations, jellyfinNotifyDeleted, jellyfinTitleFiles } from './connectors/jellyfin.js';
+import { jellyfinCatalog, jellyfinExisting, jellyfinForget, jellyfinLocations, jellyfinNotifyDeleted, jellyfinTitleFiles } from './connectors/jellyfin.js';
 import { qbtTorrentFiles } from './connectors/qbittorrent.js';
 import type { ConnectorContext } from './connectors/types.js';
 
@@ -196,29 +196,63 @@ export class MediaBridge {
 
   /**
    * Dopo un'eliminazione: avvisa Jellyfin dei percorsi tolti, avvia la scansione delle librerie (l'avviso da solo
-   * viene applicato con il ritardo del monitor di Jellyfin) e verifica che i titoli spariscano; se serve più tempo,
-   * continua a controllare in background e lo segnala con un evento.
+   * viene applicato con il ritardo del monitor di Jellyfin) e verifica che i titoli spariscano. Se dopo qualche
+   * secondo un titolo è ancora lì e tutti i suoi file risultano assenti, lo toglie con l'API di Jellyfin: la scansione
+   * non lo farebbe mai se la cartella della libreria è rimasta vuota. Se serve ancora tempo, continua in background.
    */
   async afterDelete(hostPaths: string[], ids: string[], label: string): Promise<'removed' | 'pending' | 'unconfigured'> {
     const jf = this.ctxOf('jellyfin');
     if (!jf) return 'unconfigured';
+    const jfId = this.integrations.list().find((i) => i.type === 'jellyfin' && i.enabled)!.id;
     const creds = await this.creds();
     const jfPaths = [...new Set(hostPaths.map((p) => MediaBridge.toJf(p, creds)).filter((x): x is string => !!x))];
     await jellyfinNotifyDeleted(jf, jfPaths, true).catch(() => jellyfinNotifyDeleted(jf, [], true).catch(() => undefined));
-    if (!ids.length) return 'pending';
-    const check = async () => (await jellyfinExisting(jf, ids).catch(() => ids)).length === 0;
+    if (!ids.length) {
+      this.integrations.forget(jfId);
+      return 'pending';
+    }
+    const left = async () => jellyfinExisting(jf, ids).catch(() => ids);
+    const done = () => {
+      this.integrations.forget(jfId);
+      return 'removed' as const;
+    };
     for (let i = 0; i < 8; i++) {
       await this.wait(2000);
-      if (await check()) return 'removed';
+      const l = await left();
+      if (!l.length) return done();
+      if (i === 2) await this.forgetMissing(jf, creds, l);
     }
     void (async () => {
       for (let i = 0; i < 40; i++) {
         await this.wait(15_000);
-        if (await check()) return this.events.add('info', 'media', `Sparito da Jellyfin: ${label}`);
+        const l = await left();
+        if (!l.length) {
+          done();
+          return this.events.add('info', 'media', `Sparito da Jellyfin: ${label}`);
+        }
+        if (i === 0) await this.forgetMissing(jf, creds, l);
       }
-      this.events.add('warning', 'media', `${label} risulta ancora in Jellyfin`, 'I file sono stati tolti, ma dopo 10 minuti Jellyfin mostra ancora il titolo: avvia «Scansiona tutte le librerie» in Jellyfin');
+      this.events.add('warning', 'media', `${label} risulta ancora in Jellyfin`, 'I file sono stati tolti, ma dopo 10 minuti Jellyfin mostra ancora il titolo: apri Media → Controllo libreria');
     })();
     return 'pending';
+  }
+
+  /** Toglie da Jellyfin i titoli indicati solo se tutti i loro file video risultano assenti sul disco. */
+  private async forgetMissing(jf: ConnectorContext, creds: Creds, ids: string[]) {
+    const out: string[] = [];
+    for (const id of ids) {
+      try {
+        const t = await jellyfinTitleFiles(jf, id);
+        const hosts = t.paths.map((p) => MediaBridge.toHost(p, creds));
+        if (hosts.some((h) => !h)) continue;
+        const st = await this.statAll(hosts as string[]);
+        if (st.every((x) => x.missing)) {
+          await jellyfinForget(jf, id);
+          out.push(id);
+        }
+      } catch {}
+    }
+    return out;
   }
 
   /**
@@ -248,6 +282,8 @@ export class MediaBridge {
   async libraryFixGhosts() {
     const c = await this.libraryCheck();
     if (!c.ghosts.length) return { ghosts: 0, jellyfin: 'removed' as const };
+    const jf = this.ctxOf('jellyfin')!;
+    await this.forgetMissing(jf, await this.creds(), c.ghosts.map((g) => g.id));
     const jellyfin = await this.afterDelete(c.ghosts.map((g) => g.path), c.ghosts.map((g) => g.id), `${c.ghosts.length} schede senza file`);
     return { ghosts: c.ghosts.length, jellyfin };
   }

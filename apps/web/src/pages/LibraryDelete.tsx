@@ -66,6 +66,17 @@ export function LibraryCard({ jf }: { jf: Integration }) {
 
 const short = (p: string) => p.split('/').slice(-2).join('/');
 
+/** Dopo un'eliminazione: liste di Jellyfin (aggiunti di recente, ricerca) ricaricate subito e di nuovo dopo qualche secondo. */
+export function refreshLibraryViews(qc: ReturnType<typeof useQueryClient>) {
+  const go = () => {
+    void qc.invalidateQueries({ queryKey: ['resource'] });
+    void qc.invalidateQueries({ queryKey: ['media-items'] });
+    void qc.invalidateQueries({ queryKey: ['library-check'] });
+  };
+  go();
+  for (const ms of [5_000, 20_000, 60_000]) setTimeout(go, ms);
+}
+
 export function LibraryDeleteDialog({ jfId, onClose }: { jfId: string; onClose: () => void }) {
   const toast = useToast();
   const qc = useQueryClient();
@@ -85,8 +96,7 @@ export function LibraryDeleteDialog({ jfId, onClose }: { jfId: string; onClose: 
       const where = r.jellyfin === 'removed' ? 'sparito da Jellyfin e Apollo' : r.jellyfin === 'pending' ? 'Jellyfin sta aggiornando la libreria, sparirà a breve' : 'Jellyfin non è collegato';
       const what = r.mode === 'trash' ? 'nel cestino' : `eliminato (${bytes(r.freed)} liberati)`;
       toast(r.torrentError ? 'err' : 'ok', `${r.title}: ${what}, ${where}${r.torrentsDeleted ? `; ${r.torrentsDeleted} torrent rimossi` : ''}${r.torrentError ? `. qBittorrent: ${r.torrentError}` : ''}`);
-      void qc.invalidateQueries({ queryKey: ['resource'] });
-      void qc.invalidateQueries({ queryKey: ['media-items'] });
+      refreshLibraryViews(qc);
       onClose();
     },
   });
@@ -194,7 +204,7 @@ export function LibraryCheckCard() {
     mutationFn: () => api<{ ghosts: number; jellyfin: string }>('/media/library/fix-ghosts', { method: 'POST' }),
     onSuccess: (r) => {
       toast('ok', r.jellyfin === 'removed' ? `${r.ghosts} schede tolte da Jellyfin` : 'Jellyfin sta aggiornando la libreria');
-      void qc.invalidateQueries({ queryKey: ['library-check'] });
+      refreshLibraryViews(qc);
     },
     onError: (e: Error) => toast('err', e.message),
   });

@@ -317,3 +317,11 @@ Voci append-only. Per ribaltare una decisione, aggiungerne una nuova che rimandi
 **Alternative scartate.** Eliminare in automatico le copie rimaste senza torrent (un file copiato a mano o importato da un altro disco ha anch’esso un solo collegamento). Togliere l’opzione «Elimina torrent e file scaricati» (serve per liberare i download tenendo il titolo).
 **Conseguenze.** «Non collegato a un torrent» non vuol dire «da eliminare»: l’elenco va letto. Copie su un altro disco (niente hardlink possibili) risultano sempre non collegate.
 **Da rivedere se** la libreria diventa molto grande (il controllo legge l’intero catalogo e fa un `lstat` per file) o se si vuole un controllo periodico con evento.
+
+## D-040 — Rimozione da Jellyfin quando la scansione non basta (2026-10-17)
+
+**Contesto.** Eliminato «Inglourious Basterds», ultimo film della libreria Film: file tolto, ma Jellyfin lo mostrava ancora dopo tre scansioni. Nei log di Jellyfin 12.2: `Library folder "/media/film" is inaccessible or empty, skipping`. Jellyfin non toglie niente da una cartella di libreria vuota, per prudenza (un disco non montato svuoterebbe il catalogo).
+**Scelta.** Se dopo avviso e scansione (circa 6 s) un titolo è ancora in Jellyfin, GIGI OS rilegge da Jellyfin tutti i suoi file video, li traduce sui percorsi dell’host e, **solo se mancano tutti**, chiama `DELETE /Items/{id}`. Lo stesso vale per «Togli da Jellyfin» nel Controllo libreria. Dopo la rimozione si svuota la cache delle risorse di Jellyfin in gigi-api, e l’interfaccia ricarica «Aggiunti di recente», ricerche e controllo subito, poi dopo 5, 20 e 60 secondi. Provato sul Jellyfin reale: risposta 204, scheda sparita.
+**Sicurezza.** `DELETE /Items` chiede a Jellyfin di cancellare anche i file del titolo: qui le librerie sono montate in sola lettura nel container di Jellyfin, e comunque si chiama solo per titoli i cui file risultano già assenti.
+**Alternative scartate.** Lasciare il titolo finché la libreria non torna ad avere contenuti (resterebbe visibile e non riproducibile in Apollo). Scrivere nel database di Jellyfin (vietato).
+**Da rivedere se** Jellyfin cambia il comportamento con le cartelle vuote, o se si installa GIGI OS dove le librerie di Jellyfin sono montate in scrittura (in quel caso la verifica sui file resta l’unica protezione).

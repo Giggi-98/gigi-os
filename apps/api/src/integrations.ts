@@ -285,6 +285,11 @@ export class Integrations {
     }
   }
 
+  /** Dimentica i dati in cache di un'integrazione (es. dopo un'eliminazione, per non mostrare liste vecchie). */
+  forget(id: string) {
+    for (const k of [...this.cache.keys()]) if (k.startsWith(`${id}:`)) this.cache.delete(k);
+  }
+
   isAdminResource(id: string, name: string) {
     const r = this.row(id);
     return (connectors[r.type]?.adminResources ?? []).includes(name);

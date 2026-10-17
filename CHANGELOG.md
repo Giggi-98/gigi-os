@@ -6,6 +6,7 @@ Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEG
 ## [Non rilasciato]
 
 - **Controllo libreria** in Media: titoli rimasti in Jellyfin e Apollo senza più un torrent (con «Elimina») e schede di Jellyfin senza file (con «Togli da Jellyfin»).
+- Un titolo eliminato sparisce da Jellyfin anche quando era l’ultimo della sua libreria (Jellyfin salta le cartelle vuote nella scansione); «Aggiunti di recente» si aggiorna da solo.
 - Eliminando un torrent «con i file scaricati», avviso se il titolo resta in libreria e quindi in Jellyfin e Apollo.
 
 ## [0.3.0] — 2026-10-16

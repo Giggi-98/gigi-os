@@ -24,6 +24,7 @@ import { api, ApiError, type Integration } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ago, bytes, duration, eta, rate } from '../lib/format';
 import { byType, useIntegrations, useResource } from '../lib/queries';
+import { refreshLibraryViews } from './LibraryDelete';
 
 type Torrent = {
   hash: string;
@@ -374,8 +375,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
         body: { hashes, confirm: typed },
       }),
     onSuccess: (r) => {
-      void qc.invalidateQueries({ queryKey: ['resource', qb.id] });
-      void qc.invalidateQueries({ queryKey: ['media-items'] });
+      refreshLibraryViews(qc);
       if (r.torrentError) toast('err', `Libreria ripulita, ma qBittorrent: ${r.torrentError}`);
       else
         toast(
