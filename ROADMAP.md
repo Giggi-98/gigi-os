@@ -1,6 +1,6 @@
 # Cose da fare
 
-Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-038).
+Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-039).
 
 ## 1. Traduzioni (fase C, in corso — D-035)
 

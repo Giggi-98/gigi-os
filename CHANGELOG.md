@@ -3,6 +3,11 @@
 Ogni versione ha un tag `vX.Y.Z`. Il workflow di release copia nella pagina della release la sezione con lo stesso numero.
 Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEGGIMI.md).
 
+## [Non rilasciato]
+
+- **Controllo libreria** in Media: titoli rimasti in Jellyfin e Apollo senza più un torrent (con «Elimina») e schede di Jellyfin senza file (con «Togli da Jellyfin»).
+- Eliminando un torrent «con i file scaricati», avviso se il titolo resta in libreria e quindi in Jellyfin e Apollo.
+
 ## [0.3.0] — 2026-10-16
 
 Prima versione pubblica.

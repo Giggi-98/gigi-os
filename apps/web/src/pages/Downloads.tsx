@@ -363,7 +363,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
   const preview = useQuery({
     queryKey: ['purge-plan', hashes.join(',')],
     queryFn: () => api<{ torrents: { hash: string; name: string; library: { path: string; size: number }[] }[] }>('/downloads/purge-plan', { method: 'POST', body: { hashes } }),
-    enabled: isAdmin && mode === 'everywhere',
+    enabled: isAdmin && mode !== 'torrent',
     retry: false,
   });
   const libCopies = preview.data?.torrents.flatMap((t) => t.library) ?? [];
@@ -407,7 +407,7 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
   };
   const options: [typeof mode, string, string][] = [
     ['everywhere', 'Elimina ovunque', 'Torrent, file scaricati e le loro copie in libreria: spariscono anche da Jellyfin e Apollo e lo spazio si libera.'] as [typeof mode, string, string],
-    ['files', 'Elimina torrent e file scaricati', 'La copia già importata in libreria resta disponibile in Jellyfin.'] as [typeof mode, string, string],
+    ['files', 'Elimina torrent e file scaricati', 'La copia in libreria resta: il titolo rimane in Jellyfin e Apollo.'] as [typeof mode, string, string],
     ['torrent', 'Rimuovi solo da qBittorrent', isAdmin ? 'Tutti i file restano dove sono.' : 'Tutti i file restano dove sono. Le eliminazioni dei file sono riservate agli amministratori.'] as [typeof mode, string, string],
   ].filter(([m]) => isAdmin || m === 'torrent');
   const pending = act.isPending || purge.isPending;
@@ -439,6 +439,11 @@ function DeleteDialog({ qb, torrents, onClose }: { qb: Integration; torrents: To
           </label>
         ))}
       </div>
+      {mode === 'files' && libCopies.length > 0 && (
+        <div className="mt-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn">
+          <span className="font-medium">Il titolo resta in Jellyfin e Apollo:</span> {libCopies.length === 1 ? '1 copia in libreria' : `${libCopies.length} copie in libreria`} ({bytes(libCopies.reduce((n, l) => n + l.size, 0))}) non {libCopies.length === 1 ? 'viene toccata' : 'vengono toccate'}. Per toglierlo scegli «Elimina ovunque».
+        </div>
+      )}
       {mode === 'everywhere' && (
         <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs">
           {preview.isPending && <span className="text-muted">Cerco le copie in libreria…</span>}

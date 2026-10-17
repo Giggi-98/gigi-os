@@ -323,7 +323,7 @@ export class Files {
   async statPaths(paths: unknown) {
     const list = Array.isArray(paths) ? paths : [];
     if (list.length > 5000) throw new FsError('Troppi percorsi');
-    const out: { path: string; ino?: number; dev?: number; nlink?: number; size?: number; error?: string }[] = [];
+    const out: { path: string; ino?: number; dev?: number; nlink?: number; size?: number; error?: string; missing?: boolean }[] = [];
     for (const p of list) {
       try {
         const loc = await this.locate(p);
@@ -331,7 +331,7 @@ export class Files {
         if (!st.isFile()) out.push({ path: String(p), error: 'non è un file' });
         else out.push({ path: loc.abs, ino: st.ino, dev: st.dev, nlink: st.nlink, size: st.size });
       } catch (e) {
-        out.push({ path: String(p), error: (e as Error).message });
+        out.push({ path: String(p), error: (e as Error).message, ...((e as FsError).status === 404 || (e as NodeJS.ErrnoException).code === 'ENOENT' ? { missing: true } : {}) });
       }
     }
     return out;

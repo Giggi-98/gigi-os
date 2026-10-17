@@ -6,7 +6,7 @@ import type { Integration } from '../lib/api';
 import { ago, bytes, eta, num, rate } from '../lib/format';
 import { byType, useIntegrations, useResource } from '../lib/queries';
 import { useAuth } from '../lib/auth';
-import { LibraryCard, LibraryDeleteDialog } from './LibraryDelete';
+import { LibraryCard, LibraryCheckCard, LibraryDeleteDialog } from './LibraryDelete';
 
 type JfOverview = {
   serverName: string;
@@ -231,6 +231,7 @@ function Jellyfin({ jf }: { jf: Integration }) {
           </div>
         )}
       </Card>
+      {isAdmin && <LibraryCheckCard />}
       {isAdmin && <LibraryCard jf={jf} />}
       {deleting && <LibraryDeleteDialog jfId={deleting} onClose={() => setDeleting(null)} />}
     </div>

@@ -30,7 +30,7 @@ function movie(name, hash, { linked = true } = {}) {
   return { dir, src, lib: path.join(dir, `${name}.mkv`), hash, jfId: hash.slice(0, 32), name };
 }
 
-function setup({ titles = [], torrents = [], jellyfinSlow = false } = {}) {
+function setup({ titles = [], torrents = [], jellyfinSlow = false, sticky = false } = {}) {
   const calls = { notified: [], refresh: 0, qbDelete: [], removed: [], events: [] };
   const files = new Files(parseRoots(`Download=${dl},Media=${media}`));
   const filesClient = {
@@ -47,7 +47,9 @@ function setup({ titles = [], torrents = [], jellyfinSlow = false } = {}) {
   const toJf = (p) => p.replace(media, '/media');
   // Jellyfin lento: il titolo resta visibile per le prime 10 verifiche
   let checks = 0;
-  const present = (t) => existsSync(t.lib) || (jellyfinSlow && checks++ < 10);
+  // sticky: come il vero Jellyfin, la scheda resta finché una scansione non trova il file mancante
+  const forgotten = new Set();
+  const present = (t) => (sticky ? !forgotten.has(t.jfId) : existsSync(t.lib) || (jellyfinSlow && checks++ < 10));
   const jfHttp = async (p, init = {}) => {
     const u = new URL(p, 'http://jf');
     if (u.pathname === '/Library/VirtualFolders') return res([{ Locations: ['/media/Film'] }]);
@@ -57,7 +59,11 @@ function setup({ titles = [], torrents = [], jellyfinSlow = false } = {}) {
     }
     if (u.pathname === '/Library/Refresh') {
       calls.refresh++;
+      for (const t of titles) if (!existsSync(t.lib)) forgotten.add(t.jfId);
       return res('', 204);
+    }
+    if (u.pathname === '/Items' && !u.searchParams.get('Ids')) {
+      return res({ Items: titles.filter((t) => present(t)).map((t) => ({ Id: t.jfId, Name: t.name, Type: 'Movie', Path: toJf(t.lib), LocationType: 'FileSystem' })) });
     }
     if (u.pathname === '/Items') {
       const ids = (u.searchParams.get('Ids') ?? '').split(',');
@@ -167,4 +173,22 @@ test('elimina ovunque: la copia in libreria va via anche se il motore media non 
   assert.ok(!existsSync(m.dir) && !existsSync(m.src));
   assert.ok(calls.notified.includes('/media/Film/Film Cinque (2005)'));
   assert.equal(calls.refresh, 1, 'senza id di Jellyfin si chiede la scansione');
+});
+
+test('controllo libreria: titoli senza torrent e schede di Jellyfin senza file', async () => {
+  const linked = movie('Film Sei (2006)', '1'.repeat(40));
+  const alone = movie('Film Sette (2007)', '2'.repeat(40));
+  const ghost = movie('Film Otto (2008)', '3'.repeat(40));
+  rmSync(alone.src); // torrent eliminato con i file scaricati: la copia in libreria resta da sola
+  rmSync(ghost.lib); // file tolto a mano: Jellyfin ha ancora la scheda
+  const { bridge, calls } = setup({ titles: [linked, alone, ghost], torrents: [linked], sticky: true });
+  const c = await bridge.libraryCheck();
+  assert.equal(c.total, 3);
+  assert.deepEqual(c.unlinked.map((u) => u.title), ['Film Sette (2007)']);
+  assert.deepEqual(c.ghosts.map((g) => g.title), ['Film Otto (2008)']);
+  const r = await bridge.libraryFixGhosts();
+  assert.deepEqual(r, { ghosts: 1, jellyfin: 'removed' });
+  assert.equal(calls.refresh, 1);
+  assert.deepEqual((await bridge.libraryCheck()).ghosts, []);
+  assert.ok(existsSync(alone.lib) && existsSync(linked.lib), 'il controllo non elimina niente');
 });

@@ -6,7 +6,7 @@ import type { AgentClient } from './agent.js';
 import type { Events } from './events.js';
 import type { Integrations } from './integrations.js';
 import type { Audit, SessionUser } from './security.js';
-import { jellyfinExisting, jellyfinLocations, jellyfinNotifyDeleted, jellyfinTitleFiles } from './connectors/jellyfin.js';
+import { jellyfinCatalog, jellyfinExisting, jellyfinLocations, jellyfinNotifyDeleted, jellyfinTitleFiles } from './connectors/jellyfin.js';
 import { qbtTorrentFiles } from './connectors/qbittorrent.js';
 import type { ConnectorContext } from './connectors/types.js';
 
@@ -105,7 +105,7 @@ export class MediaBridge {
   }
 
   private async statAll(paths: string[]) {
-    const out: { path: string; ino?: number; dev?: number; nlink?: number; size?: number }[] = [];
+    const out: { path: string; ino?: number; dev?: number; nlink?: number; size?: number; missing?: boolean }[] = [];
     for (let i = 0; i < paths.length; i += 1000) out.push(...(await this.files!.json<typeof out>('POST', '/v1/stat', 60_000, { paths: paths.slice(i, i + 1000) })));
     return out;
   }
@@ -219,6 +219,37 @@ export class MediaBridge {
       this.events.add('warning', 'media', `${label} risulta ancora in Jellyfin`, 'I file sono stati tolti, ma dopo 10 minuti Jellyfin mostra ancora il titolo: avvia «Scansiona tutte le librerie» in Jellyfin');
     })();
     return 'pending';
+  }
+
+  /**
+   * Controllo della libreria: titoli di Jellyfin il cui file non c'è più (schede fantasma) e titoli il cui file non è
+   * condiviso con nessun download (restati in libreria dopo l'eliminazione del torrent, o copiati a mano).
+   */
+  async libraryCheck() {
+    if (!this.files) throw Object.assign(new Error('File manager non disponibile'), { statusCode: 503 });
+    const jf = this.ctxOf('jellyfin');
+    if (!jf) throw Object.assign(new Error('Jellyfin non è collegato'), { statusCode: 409 });
+    const creds = await this.creds();
+    const all = (await jellyfinCatalog(jf)).map((i) => ({ ...i, host: MediaBridge.toHost(i.path, creds) }));
+    const st = new Map((await this.statAll(all.map((i) => i.host).filter((x): x is string => !!x))).map((x) => [x.path, x]));
+    const title = (i: (typeof all)[number]) =>
+      i.type === 'Episode' ? `${i.seriesName ?? ''} · S${String(i.season ?? 0).padStart(2, '0')}E${String(i.episode ?? 0).padStart(2, '0')}` : `${i.name}${i.year ? ` (${i.year})` : ''}`;
+    const ghosts: { id: string; title: string; path: string }[] = [];
+    const unlinked: { id: string; type: string; title: string; seriesId: string | null; seriesName: string | null; size: number; path: string }[] = [];
+    for (const i of all) {
+      const s = i.host ? st.get(i.host) : undefined;
+      if (s?.missing) ghosts.push({ id: i.id, title: title(i), path: i.host! });
+      else if (s?.nlink === 1) unlinked.push({ id: i.id, type: i.type, title: title(i), seriesId: i.seriesId, seriesName: i.seriesName, size: s.size ?? 0, path: i.host! });
+    }
+    return { checkedAt: Date.now(), total: all.length, unmapped: all.filter((i) => !i.host).length, ghosts, unlinked };
+  }
+
+  /** Toglie da Jellyfin le schede dei titoli il cui file non esiste più (avviso, scansione, verifica). */
+  async libraryFixGhosts() {
+    const c = await this.libraryCheck();
+    if (!c.ghosts.length) return { ghosts: 0, jellyfin: 'removed' as const };
+    const jellyfin = await this.afterDelete(c.ghosts.map((g) => g.path), c.ghosts.map((g) => g.id), `${c.ghosts.length} schede senza file`);
+    return { ghosts: c.ghosts.length, jellyfin };
   }
 
   /** Il file manager ha cestinato dei percorsi: se sono in una libreria, Jellyfin deve toglierli. */
@@ -469,6 +500,13 @@ export class MediaBridge {
         audit.log(req, 'media.library.delete', 'error', jfId, { err: (e as Error).message });
         throw e;
       }
+    });
+
+    app.get('/api/v1/media/library/check', admin, async () => this.libraryCheck());
+    app.post('/api/v1/media/library/fix-ghosts', admin, async (req) => {
+      const r = await this.libraryFixGhosts();
+      audit.log(req, 'media.library.fix', 'ok', `${r.ghosts} schede`, r);
+      return r;
     });
 
     app.post('/api/v1/media/items/:id/purge', admin, async (req, reply) => {

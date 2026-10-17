@@ -214,3 +214,19 @@ export async function jellyfinNotifyDeleted(ctx: ConnectorContext, paths: string
   }
   if (full) expectOk(await ctx.http('/Library/Refresh', { method: 'POST', headers: headers(ctx) }), 'Scansione Jellyfin');
 }
+
+/** Tutti i film ed episodi con il percorso del file (per il controllo della libreria). */
+export async function jellyfinCatalog(ctx: ConnectorContext) {
+  const r = await get<{ Items: FileItem[] }>(ctx, '/Items?Recursive=true&IncludeItemTypes=Movie,Episode&Fields=Path,ProductionYear&Limit=20000', 'Catalogo');
+  return r.Items.filter((i) => i.LocationType !== 'Virtual' && i.Path?.startsWith('/')).map((i) => ({
+    id: i.Id,
+    type: i.Type,
+    name: i.Name,
+    year: i.ProductionYear ?? null,
+    seriesId: i.SeriesId ?? null,
+    seriesName: i.SeriesName ?? null,
+    season: i.ParentIndexNumber ?? null,
+    episode: i.IndexNumber ?? null,
+    path: i.Path!,
+  }));
+}

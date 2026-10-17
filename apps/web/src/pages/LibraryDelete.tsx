@@ -1,10 +1,10 @@
 // «Elimina dalla libreria» (D-038): un titolo di Jellyfin con i suoi file, gli accessori e i torrent che li condividono.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Trash2 } from 'lucide-react';
+import { RefreshCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, Card, cx, Dialog, Empty, ErrorBox, Field, Input, Skeleton, useToast } from '../components/ui';
 import { api, type Integration } from '../lib/api';
-import { bytes } from '../lib/format';
+import { ago, bytes } from '../lib/format';
 import { useResource } from '../lib/queries';
 
 type Plan = {
@@ -170,5 +170,107 @@ export function LibraryDeleteDialog({ jfId, onClose }: { jfId: string; onClose: 
         </div>
       )}
     </Dialog>
+  );
+}
+
+type Check = {
+  checkedAt: number;
+  total: number;
+  unmapped: number;
+  ghosts: { id: string; title: string; path: string }[];
+  unlinked: { id: string; type: string; title: string; seriesId: string | null; seriesName: string | null; size: number; path: string }[];
+};
+
+/**
+ * Controllo della libreria: cosa c'è in Jellyfin senza più un torrent (resta finché non lo si elimina da qui)
+ * e schede di Jellyfin rimaste senza file.
+ */
+export function LibraryCheckCard() {
+  const toast = useToast();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['library-check'], queryFn: () => api<Check>('/media/library/check'), staleTime: 60_000 });
+  const [target, setTarget] = useState<string | null>(null);
+  const fix = useMutation({
+    mutationFn: () => api<{ ghosts: number; jellyfin: string }>('/media/library/fix-ghosts', { method: 'POST' }),
+    onSuccess: (r) => {
+      toast('ok', r.jellyfin === 'removed' ? `${r.ghosts} schede tolte da Jellyfin` : 'Jellyfin sta aggiornando la libreria');
+      void qc.invalidateQueries({ queryKey: ['library-check'] });
+    },
+    onError: (e: Error) => toast('err', e.message),
+  });
+  // Episodi raggruppati per serie: si elimina la serie (il dialogo mostra esattamente quali file)
+  const rows: { id: string; label: string; detail: string; size: number }[] = [];
+  const bySeries = new Map<string, { name: string; n: number; size: number }>();
+  for (const u of q.data?.unlinked ?? []) {
+    if (u.type === 'Episode' && u.seriesId) {
+      const g = bySeries.get(u.seriesId) ?? { name: u.seriesName ?? 'Serie', n: 0, size: 0 };
+      g.n++;
+      g.size += u.size;
+      bySeries.set(u.seriesId, g);
+    } else rows.push({ id: u.id, label: u.title, detail: 'Film', size: u.size });
+  }
+  for (const [id, g] of bySeries) rows.push({ id, label: g.name, detail: g.n === 1 ? '1 episodio' : `${g.n} episodi`, size: g.size });
+  const d = q.data;
+  return (
+    <Card
+      title="Controllo libreria"
+      icon={<ShieldCheck />}
+      subtitle={d ? `${d.total} titoli in Jellyfin · controllato ${ago(d.checkedAt)}` : 'Confronto tra Jellyfin, file sul disco e torrent.'}
+      className="xl:col-span-3"
+      actions={
+        <Button size="sm" variant="ghost" onClick={() => void q.refetch()} loading={q.isFetching} aria-label="Controlla di nuovo">
+          <RefreshCw />
+        </Button>
+      }
+    >
+      {q.isError && <ErrorBox error={q.error} compact />}
+      {!d && !q.isError && <Skeleton className="h-16" />}
+      {d && (
+        <div className="space-y-4 text-[13px]">
+          {d.ghosts.length > 0 && (
+            <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-warn">{d.ghosts.length === 1 ? '1 titolo in Jellyfin non ha più il file' : `${d.ghosts.length} titoli in Jellyfin non hanno più il file`}</span>
+                <Button size="sm" className="ml-auto" onClick={() => fix.mutate()} loading={fix.isPending}>
+                  Togli da Jellyfin
+                </Button>
+              </div>
+              <ul className="mt-1 space-y-0.5 text-xs text-fg-2">{d.ghosts.slice(0, 20).map((g) => <li key={g.id} className="truncate" title={g.path}>• {g.title}</li>)}</ul>
+            </div>
+          )}
+          <div>
+            <div className="text-xs font-medium text-muted">Non collegati a nessun torrent</div>
+            <p className="text-xs text-muted">
+              Restano in Jellyfin e Apollo finché non li elimini: di solito il torrent è stato rimosso tenendo la copia in libreria, oppure sono stati copiati a mano.
+            </p>
+            {rows.length === 0 ? (
+              <p className="mt-2 text-xs text-fg-2">Nessuno: ogni titolo in libreria è collegato a un torrent.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-line">
+                {rows.map((r) => (
+                  <li key={r.id} className="flex items-center gap-3 py-2">
+                    <span className="min-w-0 flex-1 truncate" title={r.label}>{r.label}</span>
+                    <span className="shrink-0 text-xs text-muted">{r.detail} · {bytes(r.size)}</span>
+                    <Button size="sm" variant="ghost" onClick={() => setTarget(r.id)} aria-label={`Elimina ${r.label}`}>
+                      <Trash2 /> Elimina
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {d.ghosts.length === 0 && <p className="text-xs text-muted">Nessuna scheda di Jellyfin senza file{d.unmapped ? ` (${d.unmapped} titoli fuori dalle cartelle raggiungibili, non controllati)` : ''}.</p>}
+        </div>
+      )}
+      {target && (
+        <LibraryDeleteDialog
+          jfId={target}
+          onClose={() => {
+            setTarget(null);
+            void qc.invalidateQueries({ queryKey: ['library-check'] });
+          }}
+        />
+      )}
+    </Card>
   );
 }
