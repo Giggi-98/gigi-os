@@ -1,6 +1,6 @@
 # Immagine unica per gigi-api e gigi-agent (cambia solo il comando); variante "media" con ffprobe per gigi-media.
 # Build multi-stage, runtime non-root.
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/agent/package.json apps/agent/
@@ -12,7 +12,7 @@ RUN npm ci --no-audit --no-fund
 COPY apps apps
 RUN npm run build
 
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY apps/agent/package.json apps/agent/
@@ -22,7 +22,7 @@ COPY apps/files/package.json apps/files/
 COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev --no-audit --no-fund -w apps/agent -w apps/api --include-workspace-root=false
 
-FROM node:22-alpine AS runtime
+FROM node:25-alpine AS runtime
 ARG GIGI_VERSION=0.0.0
 ENV NODE_ENV=production NODE_NO_WARNINGS=1
 WORKDIR /app
@@ -70,7 +70,7 @@ RUN git init -q && git remote add origin https://github.com/docker/compose.git \
 
 # Agent: Debian trixie per avere journalctl compatibile con il journal dell'host (systemd ≥ 257).
 # Dipendenze di produzione installate qui (glibc), non riusate dallo stage Alpine.
-FROM node:22-trixie-slim AS agent
+FROM node:25-trixie-slim AS agent
 ARG GIGI_VERSION=0.0.0
 LABEL org.opencontainers.image.title="GIGI OS agent" org.opencontainers.image.version="${GIGI_VERSION}" org.opencontainers.image.licenses="AGPL-3.0-only"
 RUN apt-get update && apt-get upgrade -y --no-install-recommends && apt-get install -y --no-install-recommends systemd && rm -rf /var/lib/apt/lists/*
