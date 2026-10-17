@@ -7,29 +7,35 @@ import { useAuth } from '../lib/auth';
 import { ago, dateTime } from '../lib/format';
 import { byType, useIntegrations, useResource } from '../lib/queries';
 import { BotDigestTab } from './BotDigest';
+import { WorkflowsTab } from './workflows/WorkflowsTab';
+import { useSearchParams } from 'react-router-dom';
 
 type Channel = { id: string; type: 'homeassistant' | 'ntfy' | 'telegram' | 'webhook'; name: string; config: Record<string, string>; secretFields: string[]; enabled: boolean };
 type Rule = { id: string; name: string; enabled: boolean; sources: string[]; minLevel: 'info' | 'warning' | 'error'; matchText: string | null; channels: string[]; throttleMin: number; quietFrom: string | null; quietTo: string | null };
 type Sent = { id: number; ts: number; rule_name: string | null; channel: string | null; title: string; status: 'sent' | 'failed' | 'throttled' | 'quiet'; error: string | null };
 
-const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', sistema: 'Sistema', rete: 'Rete', integrazioni: 'Integrazioni', media: 'Media', download: 'Download', backup: 'Backup', sicurezza: 'Sicurezza', aggiornamenti: 'Aggiornamenti' };
+const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', sistema: 'Sistema', rete: 'Rete', integrazioni: 'Integrazioni', media: 'Media', download: 'Download', backup: 'Backup', sicurezza: 'Sicurezza', aggiornamenti: 'Aggiornamenti', automazioni: 'Automazioni' };
 const LEVEL: Record<string, [string, Tone]> = { info: ['Informazioni', 'info'], warning: ['Avvisi', 'warn'], error: ['Errori', 'err'] };
 const TYPE_LABEL: Record<Channel['type'], string> = { homeassistant: 'Home Assistant (app sul telefono)', ntfy: 'ntfy', telegram: 'Telegram', webhook: 'Webhook' };
 
-type Tab = 'rules' | 'channels' | 'bot' | 'history' | 'events';
+type Tab = 'flows' | 'rules' | 'channels' | 'bot' | 'history' | 'events';
+const TABS: Tab[] = ['flows', 'rules', 'channels', 'bot', 'history', 'events'];
 
 export function AutomationsPage() {
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState<Tab>('rules');
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.includes(params.get('tab') as Tab) ? (params.get('tab') as Tab) : 'flows';
+  const setTab = (t: Tab) => setParams(t === 'flows' ? {} : { tab: t }, { replace: true });
   const channels = useQuery({ queryKey: ['auto-channels'], queryFn: () => api<Channel[]>('/automations/channels'), enabled: isAdmin });
   return (
     <div>
-      <PageHeader title="Automazioni" description="Regole su eventi reali del server, con notifiche sui tuoi dispositivi. Antiripetizione e ore di silenzio incluse." />
+      <PageHeader title="Automazioni" description="Flussi grafici che collegano webhook, API, GitHub, eventi e orari ad azioni; regole di notifica sugli eventi del server." />
       <Tabs
         value={tab}
         onChange={setTab}
         items={[
-          { id: 'rules', label: 'Regole' },
+          { id: 'flows', label: 'Flussi' },
+          { id: 'rules', label: 'Regole di notifica' },
           ...(isAdmin
             ? [
                 { id: 'channels' as const, label: 'Canali', count: channels.data?.length },
@@ -41,6 +47,7 @@ export function AutomationsPage() {
         ]}
       />
       <div className="mt-4">
+        {tab === 'flows' && <WorkflowsTab />}
         {tab === 'rules' && <RulesTab channels={channels.data ?? []} goChannels={() => setTab('channels')} />}
         {tab === 'channels' && <ChannelsTab channels={channels} />}
         {tab === 'bot' && <BotDigestTab channels={channels.data ?? []} />}

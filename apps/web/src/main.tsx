@@ -1,7 +1,7 @@
 import './lib/theme';
 import './index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrictMode } from 'react';
+import { StrictMode, lazy, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
@@ -26,6 +26,8 @@ import { SecurityPage } from './pages/Security';
 import { SystemPage } from './pages/System';
 import { UpcomingPage } from './pages/Upcoming';
 import { UpdatesPage } from './pages/Updates';
+// L'editor dei flussi (React Flow) si scarica solo quando lo si apre
+const WorkflowEditorPage = lazy(() => import('./pages/workflows/WorkflowEditor').then((m) => ({ default: m.WorkflowEditorPage })));
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -61,6 +63,14 @@ function App() {
         <Route path="download" element={<DownloadsPage />} />
         <Route path="file" element={<FilesPage />} />
         <Route path="automazioni" element={<AutomationsPage />} />
+        <Route
+          path="automazioni/flussi/:id"
+          element={
+            <Suspense fallback={<div className="h-[70vh] animate-pulse rounded-2xl bg-surface-2" />}>
+              <WorkflowEditorPage />
+            </Suspense>
+          }
+        />
         <Route path="backup" element={<BackupPage />} />
         <Route path="in-arrivo/backup" element={<Navigate to="/backup" replace />} />
         <Route path="in-arrivo/automazioni" element={<Navigate to="/automazioni" replace />} />

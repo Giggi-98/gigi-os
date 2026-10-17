@@ -13,6 +13,7 @@ import { Metrics } from './metrics.js';
 import { Mfa } from './mfa.js';
 import { Launcher } from './launcher.js';
 import { TelegramBot } from './telegram.js';
+import { Workflows } from './workflows/engine.js';
 import { Digest } from './digest.js';
 import { Updates } from './updates.js';
 import { MFA_REQUIRED } from './mfa.js';
@@ -68,6 +69,35 @@ async function main() {
   updates.start(warn);
   const digest = new Digest(db, automations, metrics, agent, integrations, media, undefined, updates);
   digest.start(warn);
+  // Flussi (D-041): i blocchi usano gli stessi servizi dell'interfaccia, con le stesse protezioni
+  const workflows = new Workflows(db, vault, {
+    integration: (type) => {
+      const i = integrations.list().find((x) => x.type === type && x.enabled);
+      return i ? { id: i.id, name: i.name } : null;
+    },
+    integrationAction: (id, name, body) => integrations.action(id, name, body),
+    integrationResource: (id, name, params) => integrations.resource(id, name, params, 0),
+    notify: (channel, title, body, level, label) => automations.deliver(channel, title, body, level, label),
+    channelIds: () => automations.channels().filter((c) => c.enabled).map((c) => c.id),
+    event: (level, title, details) => events.add(level, 'automazioni', title, details ?? null),
+    fetchOut: (url, init) => automations.fetchOut(url, init),
+    docker: async (name, op) => {
+      const c = await agent.json<{ name: string; controllable: boolean }>('GET', `/v1/containers/${encodeURIComponent(name)}`);
+      if (!c.controllable) throw new Error(`Il container ${c.name} è protetto (GIGI_CONTROL_ALLOW)`);
+      await agent.json('POST', `/v1/containers/${encodeURIComponent(name)}/${op}`, 60_000);
+      events.add('info', 'docker', `${c.name}: ${op} richiesto da un flusso`);
+    },
+    rescanLibrary: () => media.libraryRescan(),
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    now: () => Date.now(),
+    log: warn,
+  });
+  events.onAdd = (e) => {
+    automations.onEvent(e);
+    workflows.onEvent(e);
+  };
+  workflows.startScheduler();
+
   const bot = new TelegramBot({
     db,
     automations,
@@ -82,6 +112,8 @@ async function main() {
     warn,
   });
   bot.start();
+  bot.workflows = workflows;
+  workflows.approvalSender = (a) => bot.sendApproval(a);
 
   // Codice di setup monouso: serve solo finché non esiste alcun utente.
   const tokenFile = path.join(config.dataDir, 'setup-token');
@@ -122,6 +154,7 @@ async function main() {
     bot,
     digest,
     updates,
+    workflows,
   });
 
   followDockerEvents(agent, events, (m, e) => log('warn', m, e ?? {}));

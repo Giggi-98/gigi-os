@@ -16,6 +16,7 @@ import { registerLauncher } from './launcher.js';
 import { registerTelegram } from './telegram.js';
 import { registerDigest } from './digest.js';
 import { registerUpdates } from './updates.js';
+import { registerWorkflows } from './workflows/routes.js';
 import { atLeast, COOKIE, DUMMY_HASH, hashPassword, newId, passwordProblems, verifyPassword, type Role, type SessionUser } from './security.js';
 import { MFA_REQUIRED, TRUST_COOKIE, TRUST_DAYS } from './mfa.js';
 
@@ -757,6 +758,7 @@ export async function registerRoutes(app: FastifyInstance, d: Deps) {
   if (d.bot) registerTelegram(app, d.bot, audit, viewer, admin);
   if (d.digest) registerDigest(app, d.digest, audit, admin);
   if (d.updates) registerUpdates(app, d.updates, audit, viewer, admin);
+  if (d.workflows) registerWorkflows(app, d.workflows, audit, admin, operator);
 
   app.get('/api/v1/health', async () => ({ ok: true }));
 }

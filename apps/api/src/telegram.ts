@@ -59,7 +59,14 @@ const eta = (s: number) => (s <= 0 || s >= 8640000 ? '∞' : s < 3600 ? `${Math.
 const shortDest = (p: string) => p.split('/').filter(Boolean).slice(-2).join('/');
 const uptime = (s: number) => (s >= 86400 ? `${Math.floor(s / 86400)} g ${Math.floor((s % 86400) / 3600)} h` : `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`);
 
+/** Flussi (D-041): comandi avviati dal bot e risposte alle richieste di conferma */
+export type BotWorkflows = {
+  decide(waitId: string, choice: number | null, by: string): Promise<{ choice: string | null }>;
+  telegramCommand(command: string, text: string, who: { username: string; role: string }): string[];
+};
+
 export class TelegramBot {
+  workflows: BotWorkflows | null = null;
   private codes = new Map<string, { userId: string; exp: number }>();
   private pending = new Map<string, Pending>();
   private rate = new Map<string, number[]>();
@@ -256,14 +263,14 @@ export class TelegramBot {
     this.d.db.prepare('UPDATE telegram_links SET last_used_at = ? WHERE tg_user_id = ?').run(this.now(), tgId);
     // Un servizio irraggiungibile non deve lasciare l'utente senza risposta
     try {
-      await this.command(cmd, who, send);
+      await this.command(cmd, who, send, m.text);
     } catch (e) {
       this.d.warn('bot Telegram: comando non riuscito', { cmd, err: (e as Error).message });
       await send({ text: `⚠️ ${esc(cmd)} non riuscito: ${esc((e as Error).message.slice(0, 200))}` });
     }
   }
 
-  private async command(cmd: string, who: Extract<Who, { ok: true }>, send: (r: Reply) => Promise<void>) {
+  private async command(cmd: string, who: Extract<Who, { ok: true }>, send: (r: Reply) => Promise<void>, text = cmd) {
     switch (cmd) {
       case '/stato':
         return send(await this.stato());
@@ -280,8 +287,17 @@ export class TelegramBot {
         this.unlink(who.tgId);
         this.d.audit.log(this.fakeReq(who), 'telegram.unlink', 'ok', who.username, { tgUserId: who.tgId });
         return send({ text: 'Account scollegato. Per ricollegarlo genera un nuovo codice in GIGI OS.' });
-      default:
+      default: {
+        // Comandi dei flussi (blocco «Comando Telegram»): solo operatori e amministratori
+        if (this.workflows && atLeast(who.role, 'operator')) {
+          const started = this.workflows.telegramCommand(cmd, text, { username: who.username, role: who.role });
+          if (started.length) {
+            this.d.audit.log(this.fakeReq(who), 'workflow.telegram', 'ok', cmd, { flussi: started });
+            return send({ text: `▶️ Avviato: ${started.map(esc).join(', ')}` });
+          }
+        }
         return send({ text: 'Comando sconosciuto. Scrivi /aiuto.' });
+      }
     }
   }
 
@@ -394,9 +410,40 @@ export class TelegramBot {
     return { text: `<b>🎬 Da rivedere</b> (${items.length})\n${lines.join('\n')}`, keyboard: kb };
   }
 
+  /** Richiesta di conferma di un flusso: un messaggio con un pulsante per opzione a ogni account collegato con ruolo operatore o admin. */
+  async sendApproval(a: { waitId: string; workflow: string; message: string; options: { label: string }[]; expiresAt: number }) {
+    if (!this.token()) return;
+    const rows = this.d.db.prepare('SELECT tg_user_id, chat_id FROM telegram_links').all() as { tg_user_id: string; chat_id: string }[];
+    const keyboardRows = [...a.options.map((o, i) => [{ text: `${i + 1}. ${trunc(o.label, 58)}`, data: `wf:${a.waitId}:${i}` }]), [{ text: '✖️ Rifiuta', data: `wf:${a.waitId}:x` }]];
+    const text = `<b>${esc(a.workflow)}</b>\n${esc(a.message)}\n<i>Scade ${new Date(a.expiresAt).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</i>`;
+    for (const r of rows) {
+      const who = this.whoIs(r.tg_user_id);
+      if (!who.ok || !atLeast(who.role, 'operator')) continue;
+      await this.send(r.chat_id, { text, keyboard: keyboardRows }).catch((e: Error) => this.d.warn('bot Telegram: conferma non inviata', { err: e.message }));
+    }
+  }
+
+  private async onWorkflowAnswer(q: NonNullable<Update['callback_query']>, answer: (t: string) => Promise<unknown>) {
+    const [, waitId, raw] = q.data!.split(':');
+    const who = this.whoIs(String(q.from.id));
+    if (!who.ok || !atLeast(who.role, 'operator')) return answer(who.ok ? 'Serve il ruolo operatore o amministratore.' : who.reason);
+    if (!this.workflows || !/^[0-9a-f]{20}$/.test(waitId ?? '')) return answer('Richiesta non valida');
+    const choice = raw === 'x' ? null : Number(raw);
+    try {
+      const r = await this.workflows.decide(waitId, choice, who.username);
+      this.d.audit.log(this.fakeReq(who), 'workflow.approval', 'ok', waitId, { scelta: r.choice, via: 'telegram' });
+      await answer(r.choice ? 'Confermato' : 'Rifiutato');
+      if (q.message) await this.edit(q.message.chat.id, q.message.message_id, { text: r.choice ? `✅ ${esc(who.username)} ha scelto: <b>${esc(r.choice)}</b>` : `✖️ Rifiutato da ${esc(who.username)}` });
+    } catch (e) {
+      await answer((e as Error).message.slice(0, 180));
+      if (q.message) await this.edit(q.message.chat.id, q.message.message_id, { text: `ℹ️ ${esc((e as Error).message.slice(0, 200))}` }).catch(() => undefined);
+    }
+  }
+
   private async onCallback(q: NonNullable<Update['callback_query']>) {
     const answer = (text: string) => this.call('answerCallbackQuery', { callback_query_id: q.id, text: text.slice(0, 190) }).catch(() => undefined);
     const tgId = String(q.from.id);
+    if (q.data?.startsWith('wf:')) return this.onWorkflowAnswer(q, answer);
     const p = q.data ? this.pending.get(q.data) : undefined;
     if (!p || p.exp < this.now() || p.tgId !== tgId || !q.message) return answer('Pulsante scaduto: ripeti il comando.');
     this.pending.delete(q.data!);

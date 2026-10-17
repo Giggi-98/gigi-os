@@ -5,6 +5,7 @@ Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEG
 
 ## [Non rilasciato]
 
+- **Flussi** in Automazioni: editor grafico stile n8n con blocchi di ricezione (webhook con token, API JSON, GitHub, RSS, pianificazione, eventi di GIGI OS, comandi Telegram), logica (filtri, strade, attese fino a una data, doppioni, conferme con pulsanti su Telegram) e azioni (notifiche, HTTP, ricerca e download torrent, Jellyfin, container). Storico di ogni esecuzione blocco per blocco. Modelli pronti: «Borollo: film confermato», «/film da Telegram», «Avvisami quando un titolo è pronto».
 - **Controllo libreria** in Media: titoli rimasti in Jellyfin e Apollo senza più un torrent (con «Elimina») e schede di Jellyfin senza file (con «Togli da Jellyfin»).
 - Un titolo eliminato sparisce da Jellyfin anche quando era l’ultimo della sua libreria (Jellyfin salta le cartelle vuote nella scansione); «Aggiunti di recente» si aggiorna da solo.
 - Eliminando un torrent «con i file scaricati», avviso se il titolo resta in libreria e quindi in Jellyfin e Apollo.

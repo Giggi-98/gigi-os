@@ -12,7 +12,7 @@ import { newId, type Audit } from './security.js';
 import { safeFetch, validateUrl, TargetError } from './ssrf.js';
 import type { Vault } from './vault.js';
 
-export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup', 'sicurezza', 'aggiornamenti'] as const;
+export const SOURCES = ['docker', 'sistema', 'rete', 'integrazioni', 'media', 'download', 'backup', 'sicurezza', 'aggiornamenti', 'automazioni'] as const;
 const LEVELS: Level[] = ['info', 'warning', 'error'];
 
 type ChannelRow = { id: string; type: string; name: string; config: string; secret_enc: string | null; enabled: number; created_at: number; updated_at: number };
@@ -88,6 +88,24 @@ export class Automations {
     private log: (msg: string, extra?: object) => void,
   ) {
     this.privateList = makeBlockList(PRIVATE);
+  }
+
+  /**
+   * Richiesta in uscita dei flussi (D-041): Internet pubblico e reti LAN autorizzate, niente redirect, risposta
+   * restituita anche con stato d'errore (lo interpreta il blocco).
+   */
+  async fetchOut(url: string, init: RequestInit & { timeoutMs?: number }) {
+    const u = validateUrl(url);
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    const addrs = isIP(host) ? [{ address: host, family: isIP(host) }] : await lookup(host, { all: true });
+    for (const a of addrs) {
+      const fam = a.family === 6 ? 'ipv6' : 'ipv4';
+      if (this.privateList.check(a.address, fam) && !this.allowedLan.check(a.address, fam)) throw new TargetError(`Destinazione ${a.address} non consentita`, 'forbidden_target');
+    }
+    const res = await fetch(u, { ...init, redirect: 'manual', signal: AbortSignal.timeout(init.timeoutMs ?? 15_000) });
+    const text = await res.text();
+    if (text.length > 4 * 1024 * 1024) throw new Error('Risposta troppo grande');
+    return { status: res.status, text, type: res.headers.get('content-type') };
   }
 
   // ───────── canali ─────────

@@ -55,7 +55,7 @@ Al termine controlla in `.env` le cartelle delle librerie (`GIGI_MEDIA_LIBRARIES
 | Media automation | Download completati → riconoscimento (nome, ffprobe, metadati TMDb tramite Jellyfin) → proposta con confidenza e motivazioni → import con **hardlink** → notifica e verifica in Jellyfin (e quindi Apollo) | Import automatico **spento** di default; sotto l’85% serve conferma; correzione manuale; duplicati e conflitti bloccati |
 | Armony | Dispositivi e brano in riproduzione con comandi (play/pausa/avanti/indietro/volume), stato del server Armony, certificato del dominio, registro eventi, Navidrome, stack `armony` | Richiede la chiave API Armony (`arm_…`); comandi e registro solo per gli admin |
 | Integrazioni | Aggiunta, verifica, modifica e rimozione dei connettori; credenziali cifrate | Jellyfin, qBittorrent, Navidrome, Home Assistant, Armony, Apollo, HTTP generico |
-| Automazioni | Regole sugli eventi (Docker, sistema, integrazioni, media, download, backup) con livello minimo, filtro testo, antiripetizione e ore di silenzio; canali Home Assistant, ntfy, Telegram (con **rilevamento automatico del Chat ID**) e webhook con prova di invio; storico notifiche; registro eventi | 7 regole suggerite create **disattivate**. Segreti dei canali cifrati. Nuovi eventi: download completato, media da rivedere, servizio systemd in errore |
+| Automazioni | **Flussi** in un editor grafico (stile n8n): blocchi di ricezione, logica e azioni collegati tra loro, con storico di ogni esecuzione (vedi «Flussi»). Regole sugli eventi (Docker, sistema, integrazioni, media, download, backup) con livello minimo, filtro testo, antiripetizione e ore di silenzio; canali Home Assistant, ntfy, Telegram (con **rilevamento automatico del Chat ID**) e webhook con prova di invio; storico notifiche; registro eventi | 7 regole suggerite create **disattivate**. Segreti dei canali cifrati. Nuovi eventi: download completato, media da rivedere, servizio systemd in errore |
 | Bot e digest | **Bot Telegram** per gli account collegati (`/collega` da Sicurezza → Il mio account → Telegram): `/stato`, `/download`, `/media`, `/digest`; operatori e admin mettono in pausa o riprendono i torrent e importano o ignorano i media (import con doppia conferma). **Digest** giornaliero e settimanale su Telegram, ntfy o Home Assistant, con anteprima e invio manuale | Bot e digest sono spenti finché un admin non li attiva (Automazioni → Bot e digest). Ogni azione dal telefono va nell’audit a nome dell’utente |
 | Backup | Backup giornaliero (03:30, 14 copie) di database GIGI OS e motore media (`VACUUM INTO` + `integrity_check`), `.env`, `compose.yaml` e **configurazioni di qBittorrent e Jellyfin** (incluso `jellyfin.db` copiato a caldo); esecuzione manuale, download, eliminazione, guida al ripristino | La chiave master è esclusa salvo opzione esplicita. I backup sono in `/opt/gigi-os/backups` (stesso disco: scaricane copie altrove) |
 | Sicurezza | Cambio password, **verifica in due passaggi** (app di autenticazione, codici di recupero, cambio telefono), sessioni attive, **dispositivi fidati** (codice non richiesto per un periodo scelto dall’admin), utenti e ruoli con stato della 2FA e azzeramento, audit log, modello di sicurezza | Ruoli: amministratore, **operatore**, sola lettura (vedi sotto). 2FA obbligatoria per amministratori e operatori |
@@ -121,6 +121,32 @@ Il cestino della radice `Media` è `/srv/media/.gigi-trash`: se `/srv/media` app
 6. Dopo l’import, Jellyfin viene notificato con la stessa API usata da Sonarr/Radarr (`/Library/Media/Updated`). Poi GIGI OS controlla che il file compaia: «In libreria» significa visibile in Jellyfin e quindi in Apollo. Se dopo 5 controlli non compare, viene richiesta una scansione completa.
 
 L’import automatico si attiva dalla pagina (casella «Import automatico ≥ 85%»). Ogni azione resta nello storico dell’elemento e nell’audit log.
+
+## Flussi
+
+Automazioni → **Flussi**: ogni flusso è un insieme di blocchi collegati. Si parte da un blocco di **ricezione**, si passa per la **logica** e si arriva alle **azioni**. I flussi nuovi nascono spenti; si attivano dall’editor o dall’elenco.
+
+| Ricezione | Logica | Azioni |
+|---|---|---|
+| Avvio manuale (con dati di prova) | Filtro (se / allora, più condizioni) | Notifica sui canali configurati |
+| **Webhook in entrata** (token segreto) | Scegli strada (più uscite) | Richiesta HTTP verso un’API |
+| Pianificazione (ogni N minuti, ogni giorno, giorni della settimana, una volta) | Imposta campi | **Cerca torrent** (lingua, qualità, dimensione, seed) |
+| Evento di GIGI OS (Docker, download, media, aggiornamenti…) | **Attendi** (per un tempo o fino a una data, anche «N ore prima») | Aggiungi a qBittorrent |
+| Controlla un’API JSON (elementi nuovi) | Ignora doppioni | C’è già in Jellyfin? |
+| GitHub (commit, issue con etichetta, pull request, release, un file che cambia) | **Chiedi conferma** (pulsanti su Telegram e qui) | Scansione Jellyfin |
+| Feed RSS / Atom | | Avvia o riavvia un container consentito |
+| Comando Telegram (es. `/film Matrix`) | | Scrivi un evento |
+
+- **Editor:** aggiungi i blocchi dalla colonna a sinistra, collega un’uscita (pallino a destra) all’ingresso di un altro blocco, clicca un blocco per configurarlo. Non sono ammessi cicli né ingressi nei blocchi di ricezione.
+- **Espressioni:** nei campi si scrivono i dati dei passi precedenti tra doppie graffe, con [JSONata](https://docs.jsonata.org/overview): `{{ json.title }}` (dati attuali), `{{ trigger.body.date }}` (cosa è arrivato), `{{ node.NomeBlocco.campo }}`. Niente codice JavaScript; ogni espressione ha limiti di tempo e di profondità.
+- **Esegui ed Esecuzioni:** «Esegui» prova il flusso con i dati di prova o con l’ultimo evento ricevuto. In «Esecuzioni» si vede cosa è entrato e uscito da ogni blocco, e i blocchi si colorano con l’esito.
+- **Attese e conferme** restano salvate anche se GIGI OS si riavvia. Le conferme arrivano su Telegram agli account collegati con ruolo operatore o amministratore, e compaiono in Automazioni → Flussi: vale la prima risposta. Un’esecuzione interrotta a metà da un riavvio risulta in errore.
+- **Limiti:** al massimo 60 esecuzioni ogni 10 minuti per flusso, 200 passi per esecuzione, 4 esecuzioni contemporanee; storico di 30 giorni (200 esecuzioni per flusso).
+- **Permessi:** creare, modificare ed eseguire i flussi è da amministratore; rispondere alle conferme anche da operatore. Ogni modifica va nell’audit.
+
+**Webhook in entrata.** Ogni blocco webhook ha il suo indirizzo `https://<GIGI_BIND>:8470/api/v1/hooks/<flusso>/<blocco>` e un token generato da GIGI OS, mostrato una sola volta (nel database ne resta solo l’impronta). Il chiamante manda `POST` o `PUT` con corpo JSON e `Authorization: Bearer <token>`; il token nell’indirizzo non vale. Risponde `202`. Il webhook è raggiungibile solo dalla rete locale o dalla VPN, perché GIGI OS ascolta solo lì. Il certificato è autofirmato: chi chiama deve fidarsi di `secrets/tls.crt` (o, per le prove, usare `curl -k`). Anche a flusso spento l’ultimo evento ricevuto viene salvato e mostrato nell’editor, con i campi pronti da copiare: così le espressioni si scrivono sul formato vero del servizio esterno. Le chiamate dal browser (CORS) non sono supportate: deve chiamare il server del servizio.
+
+**Modello «Borollo: film confermato».** Webhook → «Confermato?» → «Dati del film» (titolo, anno, data) → «Già in libreria?» (se c’è: notifica) → «Fino a 3 giorni prima» della data → «Cerca in italiano» → «Quale scarico?» (le 3 versioni migliori come pulsanti) → «Scarica» in qBittorrent, categoria Film → notifica. Poi il motore media lo importa in Jellyfin come sempre. I campi `status`, `title`, `year` e `date` del modello sono ipotesi: dopo il primo evento di prova di Borollo si adattano nei blocchi «Confermato?» e «Dati del film». Gli altri modelli: «/film da Telegram» e «Avvisami quando un titolo è pronto». Scarica solo ciò che hai diritto di scaricare: la ricerca usa i plugin già installati in qBittorrent.
 
 ## Collegare i servizi
 

@@ -1,6 +1,6 @@
 # Cose da fare
 
-Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-040).
+Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-041).
 
 ## 1. Traduzioni (fase C, in corso — D-035)
 
@@ -10,7 +10,7 @@ Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.
 
 - [ ] Sistema, Aggiornamenti, Rete, Docker (con Stack e Pulizia)
 - [ ] File, Media (con «Elimina dalla libreria»), Download, Media automation, Armony
-- [ ] Automazioni (con Bot e digest), Integrazioni, Sicurezza, Backup, App
+- [ ] Automazioni (con Bot e digest e l’editor dei flussi), Integrazioni, Sicurezza, Backup, App
 - [ ] Testi che citano Apollo come se ci fosse sempre (es. «Disponibile in Jellyfin/Apollo»): mostrarli solo se l’integrazione esiste
 - [ ] API: messaggi d’errore nella lingua della richiesta (`Accept-Language`)
 - [ ] Eventi salvati come chiave + variabili, non come testo italiano (oggi restano in italiano anche con l’interfaccia in inglese)
@@ -43,6 +43,8 @@ Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.
 - [ ] Launcher: riordino con trascinamento; link diretti ai titoli in Apollo (prima verificare il formato dei suoi link)
 - [ ] Aggiornamento di GIGI OS con un clic dall’interfaccia (oggi `sudo ./update.sh`, D-037); tag firmati e verifica delle immagini
 - [ ] Prima prova di `update.sh` su un server vero (provato solo in ambiente isolato con un `docker` finto)
+- [ ] Flussi (D-041): blocco «servizio di Home Assistant» (serve un’azione nel connettore); firma HMAC dei webhook (stile GitHub); CORS per chi chiama dal browser; esposizione dei soli webhook su internet (Cloudflare Tunnel o Tailscale Funnel, con piano e consenso); trascinamento dalla tavolozza; copia/incolla di blocchi; esportazione/importazione dei flussi in JSON; ripresa di un’esecuzione dal blocco fallito
+- [ ] Borollo: collegare la wishlist vera (formato del webhook da vedere con il primo evento di prova; Borollo deve raggiungere GIGI OS dalla LAN o dalla VPN)
 - [ ] Cestino: svuotamento automatico dopo N giorni e spazio occupato in evidenza (D-038)
 - [ ] Aggiornamenti: leggere `/run/reboot-required`; aggiornamento con un clic per gli stack autorizzati esplicitamente
 

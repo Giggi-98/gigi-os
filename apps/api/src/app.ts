@@ -22,6 +22,7 @@ import type { TelegramBot } from './telegram.js';
 import type { Digest } from './digest.js';
 import type { Updates } from './updates.js';
 import { registerRoutes } from './routes.js';
+import type { Workflows } from './workflows/engine.js';
 import { Audit, COOKIE, LoginLimiter, Sessions } from './security.js';
 import { TargetError } from './ssrf.js';
 
@@ -52,6 +53,7 @@ export type Deps = {
   bot?: TelegramBot;
   digest?: Digest;
   updates?: Updates;
+  workflows?: Workflows;
 };
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -84,7 +86,8 @@ export async function buildApp(deps: Deps): Promise<FastifyInstance> {
         }
       }
       const pathOnly = req.url.split('?')[0];
-      if (!CSRF_EXEMPT.has(pathOnly)) {
+      // Webhook in entrata dei flussi: niente sessione, li protegge il token del blocco (workflows/routes.ts)
+      if (!CSRF_EXEMPT.has(pathOnly) && !pathOnly.startsWith('/api/v1/hooks/')) {
         if (!req.user) return reply.code(401).send({ error: 'Autenticazione richiesta' });
         if (req.headers['x-csrf-token'] !== req.user.csrf) return reply.code(403).send({ error: 'Token CSRF mancante o non valido' });
       }
