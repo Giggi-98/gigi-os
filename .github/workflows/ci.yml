@@ -41,7 +41,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
       - name: Scansione vulnerabilità (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        # Fissato al commit della v0.36.0: i tag di un'azione di terze parti si possono spostare
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: gigi-os-ci-${{ matrix.target }}:test
           severity: CRITICAL,HIGH

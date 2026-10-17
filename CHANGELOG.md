@@ -3,6 +3,10 @@
 Ogni versione ha un tag `vX.Y.Z`. Il workflow di release copia nella pagina della release la sezione con lo stesso numero.
 Per aggiornare un server: `sudo ./update.sh` nella cartella di GIGI OS (vedi LEGGIMI.md).
 
+## [Non rilasciato]
+
+- GitHub: la release pubblica le immagini con il proprietario in minuscolo (GHCR lo richiede) e si può riavviare a mano per un tag già pubblicato; la CI usa Trivy fissato a un commit.
+
 ## [0.3.1] — 2026-10-17
 
 Aggiornamento da 0.3.0: `sudo ./update.sh` (applica da solo la migrazione 008 del database; copia dei dati in `backups/update-0.3.0-to-0.3.1-…`).
