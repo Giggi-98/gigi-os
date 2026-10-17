@@ -1,6 +1,6 @@
 # Cose da fare
 
-Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-041).
+Elenco del lavoro rimasto, aggiornato al 16 ottobre 2026. Le scelte già fatte sono in `DECISIONS.md` (D-027 … D-044).
 
 ## 1. Traduzioni (fase C, in corso — D-035)
 
@@ -45,6 +45,7 @@ Per ogni pagina: `node scripts/dev/i18n-codemod.mjs apps/web/src/pages/<Pagina>.
 - [ ] Prima prova di `update.sh` su un server vero (provato solo in ambiente isolato con un `docker` finto)
 - [ ] Flussi (D-041): blocco «servizio di Home Assistant» (serve un’azione nel connettore); firma HMAC dei webhook (stile GitHub); CORS per chi chiama dal browser; esposizione dei soli webhook su internet (Cloudflare Tunnel o Tailscale Funnel, con piano e consenso); trascinamento dalla tavolozza; copia/incolla di blocchi; esportazione/importazione dei flussi in JSON; ripresa di un’esecuzione dal blocco fallito
 - [ ] Borollo: collegare la wishlist vera (formato del webhook da vedere con il primo evento di prova; Borollo deve raggiungere GIGI OS dalla LAN o dalla VPN)
+- [ ] Docker Compose dell’agent: tornare al binario ufficiale quando una release è compilata con Go ≥ 1.26.9 e x/net ≥ 0.60.0 (D-044); fino ad allora aggiornare a mano versione e commit nel Dockerfile
 - [ ] Cestino: svuotamento automatico dopo N giorni e spazio occupato in evidenza (D-038)
 - [ ] Aggiornamenti: leggere `/run/reboot-required`; aggiornamento con un clic per gli stack autorizzati esplicitamente
 

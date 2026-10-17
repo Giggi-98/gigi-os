@@ -50,8 +50,23 @@ LABEL org.opencontainers.image.title="GIGI OS" \
       org.opencontainers.image.description="Homelab control center self-hosted"
 CMD ["node", "apps/api/dist/index.js"]
 
-# Binario ufficiale di Docker Compose (Apache-2.0) per gli stack creati dal wizard (D-025).
-FROM docker/compose-bin:v5.6.0 AS compose
+# Docker Compose (Apache-2.0) per gli stack creati dal wizard (D-025), ricompilato dai sorgenti ufficiali (D-044):
+# il binario pubblicato v5.6.0 usa Go 1.26.8 e golang.org/x/net 0.58.0, con vulnerabilità alte già corrette.
+# Sorgenti fissati al commit del tag v5.6.0; compilazione incrociata (niente emulazione per arm64).
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS compose
+ARG TARGETOS=linux
+ARG TARGETARCH
+ARG COMPOSE_VERSION=v5.6.0
+ARG COMPOSE_COMMIT=42f48072bbf92ee9b0e43f9fdf2008d03546e7ca
+RUN apk add --no-cache git
+WORKDIR /src
+RUN git init -q && git remote add origin https://github.com/docker/compose.git \
+ && git fetch -q --depth 1 origin "$COMPOSE_COMMIT" && git checkout -q FETCH_HEAD \
+ && [ "$(git rev-parse HEAD)" = "$COMPOSE_COMMIT" ] \
+ && go get golang.org/x/net@v0.60.0 && go mod tidy \
+ && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="${TARGETARCH:-$(go env GOARCH)}" \
+    go build -trimpath -ldflags "-s -w -X github.com/docker/compose/v5/internal.Version=$COMPOSE_VERSION" -o /docker-compose ./cmd \
+ && go version -m /docker-compose | grep -E "^/docker-compose|golang.org/x/net\s"
 
 # Agent: Debian trixie per avere journalctl compatibile con il journal dell'host (systemd ≥ 257).
 # Dipendenze di produzione installate qui (glibc), non riusate dallo stage Alpine.
