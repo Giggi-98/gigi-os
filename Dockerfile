@@ -53,7 +53,7 @@ CMD ["node", "apps/api/dist/index.js"]
 # Docker Compose (Apache-2.0) per gli stack creati dal wizard (D-025), ricompilato dai sorgenti ufficiali (D-044):
 # il binario pubblicato v5.6.0 usa Go 1.26.8 e golang.org/x/net 0.58.0, con vulnerabilità alte già corrette.
 # Sorgenti fissati al commit del tag v5.6.0; compilazione incrociata (niente emulazione per arm64).
-FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS compose
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine AS compose
 ARG TARGETOS=linux
 ARG TARGETARCH
 ARG COMPOSE_VERSION=v5.6.0
